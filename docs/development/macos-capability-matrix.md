@@ -98,23 +98,23 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 | CAP-25 | immutable geometry generation 与 stale-frame rejection | `hardware-validated` | `SCStreamFrameInfoScreenRect` 驱动 move/resize geometry invalidation；临时窗口验证新 generation 恢复到正确位置/尺寸，另有 callback race tests | macOS 13.0 move fallback 与官方客户端 rebind |
 | CAP-26 | frame pixel → global logical/CGEvent coordinate | `unit-tested` | scale 1.0/2.0/1.5、offset、crop、positive Mac logical geometry tests | actual game four-corner coordinate hardware validation |
 | CAP-27 | 1920×1080 1000+ continuous frames | `hardware-validated` | 官方客户端窗口模式 actual `1920×1080×3` 完成 1000 unique frames，34.295 s、约 29.24 FPS，单槽且无 stall/error；逻辑客户区为 `960×540`、Retina scale 2.0 | packaged `.app` 与更长时段 leak observation |
-| CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `unit-tested` | diagnostics 提供 FPS、frame age、overwrite/drop、target/capture generation、geometry、invalidation 与 rebuild；posted coordinate 留待 Stage E | hardware capture diagnostics + Stage E posted-coordinate trace |
+| CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `unit-tested` | diagnostics 提供 FPS、frame age、overwrite/drop、target/capture generation、geometry、invalidation 与 rebuild；fake Quartz sink 已验证 frame pixel → global point | actual game posted-coordinate trace |
 
 ## 7. Foreground input 与安全
 
 | ID | 能力 | 当前证据 | 下一门槛 |
 |---|---|---|---|
-| CAP-30 | Quartz key tap | `not-implemented` | fake event sink + official game |
-| CAP-31 | Quartz key down/up/hold | `not-implemented` | held-state unit + W/A/S/D hardware |
-| CAP-32 | left/right/middle down/up/click | `not-implemented` | unit + game hardware |
-| CAP-33 | absolute mouse coordinate mapping | `not-implemented` | geometry unit + game hardware |
-| CAP-34 | scroll | `not-implemented` | unit + task hardware |
-| CAP-35 | `HeldInputState` keys/buttons/owner/invalidation | `not-implemented` | deterministic state/concurrency tests |
-| CAP-36 | idempotent best-effort `release_all()` | `not-implemented` | release failure、vanished target、repeat tests |
-| CAP-37 | `ForegroundGuard` immediately before ordinary event/batch | `not-implemented` | focus-race tests + Command-Tab hardware |
-| CAP-38 | invalidation 后无 ordinary event，只允许 matching release | `not-implemented` | concurrent gate tests + hardware leak test |
-| CAP-39 | task/capture/permission/device/app shutdown release ordering | `not-implemented` | lifecycle tests + packaged app |
-| CAP-40 | platform-neutral CursorService seam | `unit-tested` | unavailable/Windows seam tests 已通过；Mac Quartz implementation 未完成 | 阶段 E Mac implementation + hardware |
+| CAP-30 | Quartz key tap | `unit-tested` | public Quartz event sink + fake sink tap/down-time/release tests | official game key tap hardware |
+| CAP-31 | Quartz key down/up/hold | `unit-tested` | duplicate-down、matching-up、held-state 与 watchdog release tests | W/A/S/D hardware |
+| CAP-32 | left/right/middle down/up/click | `unit-tested` | absolute move、三键 down/up/click、cursor-query failure release tests | official game hardware |
+| CAP-33 | absolute mouse coordinate mapping | `unit-tested` | frame-local physical pixel → global logical point fake sink tests | actual game four-corner hardware |
+| CAP-34 | scroll | `unit-tested` | guarded Quartz scroll fake sink tests | task hardware |
+| CAP-35 | `HeldInputState` keys/buttons/owner/invalidation | `unit-tested` | shared `RLock`、owner/generation、snapshot、clear 与 duplicate state tests | concurrent real-input observation |
+| CAP-36 | idempotent best-effort `release_all()` | `unit-tested` | partial release failure 继续释放、总是清 state、重复调用 tests | vanished-target 与 hardware release observation |
+| CAP-37 | `ForegroundGuard` immediately before ordinary event/batch | `unit-tested` | target/PID、双权限、frontmost、capture state 与双 generation gate tests | Command-Tab hardware |
+| CAP-38 | invalidation 后无 ordinary event，只允许 matching release | `unit-tested` | ordinary event failure closes gate；watchdog/ExitEvent 同步 release；后续 ordinary event 被拒绝 | hardware leak test |
+| CAP-39 | task/capture/permission/device/app shutdown release ordering | `unit-tested` | capture invalidation callback、executor pause/stop、ExitEvent binding、DeviceManager close/start lifecycle lock tests | packaged app |
+| CAP-40 | platform-neutral CursorService seam | `unit-tested` | Windows/unavailable seam 保持；Mac 使用绑定同一 foreground gate 的 Quartz cursor service | hardware cursor query/move |
 | CAP-41 | relative/delta mouse X/Y | `not-implemented` | 阶段 F 第三优先级 hardware；只阻止 full-camera claims |
 | CAP-42 | W/A/S/D + left/skill/middle/right-hold combinations | `not-implemented` | 阶段 F official-game matrix；通过后可开放 locked tasks |
 
@@ -123,8 +123,8 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 | ID | 能力 | 当前证据 | 下一门槛 |
 |---|---|---|---|
 | CAP-50 | 真实 Mac game matching config | `hardware-validated` | 官方客户端实测 `com.kurogame.mingchao` / `鸣潮` 并写入独立 `macos` hints | 地区/语言变体与 packaged app 验证 |
-| CAP-51 | Mac logical key set / game hotkeys | `not-implemented` | Quartz map unit + official-client key validation |
-| CAP-52 | `CombatCheck` 不直接调用 Win32，使用 framework cursor seam | `unit-tested` | import/unit tests 通过；Mac CursorService 未实现 | 阶段 E/F hardware |
+| CAP-51 | Mac logical key set / game hotkeys | `unit-tested` | public HIToolbox `kVK_*` map 覆盖现有 OK-WW task hotkeys 并通过 map tests | official-client key validation |
+| CAP-52 | `CombatCheck` 不直接调用 Win32，使用 framework cursor seam | `unit-tested` | import/unit tests 通过；Mac Quartz cursor service 已绑定 foreground gate | hardware |
 | CAP-53 | `MouseResetTask` Mac P0 显式 unsupported | `unit-tested` | capability declaration/preflight test | UI 文案和 packaged behavior |
 | CAP-54 | task 不依赖具体 `PostMessageInteraction` 类型 | `unit-tested` | existing task regression/import tests | Windows CI |
 | CAP-55 | cross-platform screenshot-folder open/reveal | `not-implemented` | platform service + task tests |
@@ -186,13 +186,13 @@ CAP-41 未通过时不阻止 CAP-60，也不阻止已经通过的 CAP-62；但 C
 
 截至本记录：
 
-- 可声明“平台安全安装/导入、capability/task declaration、Stage C target/permission contract，以及 Stage D capture/lifecycle/geometry contract 已在无游戏环境通过单元测试”；
-- macOS `SCShareableContent` 与 Quartz metadata adapter 已有 fake API mapping tests，但本机没有官方客户端，CAP-12/CAP-50 仍不得提升；
-- 不可声明已经发现或捕获官方游戏窗口；
-- persistent `SCStream` 生产路径已实现并通过 fake lifecycle/PyObjC construction smoke，但尚未启动真实 capture、不得声明 1920×1080 内容帧或 1000+ 帧稳定性；
-- 不可声明 Quartz input 或 packaged app 已实现；权限仅完成状态/请求 contract，真实授权、撤销和稳定应用身份仍未验收；
+- 可声明平台安全安装/导入、capability/task declaration、Stage C target/permission contract、Stage D capture/lifecycle/geometry，以及 Stage E Quartz foreground input/fail-closed contract 已通过本地自动化；
+- 已在 source identity 下发现并捕获官方客户端窗口，完成窗口模式 1920×1080 content-only BGR 与 1000 unique frames；
+- Quartz input 生产实现已存在并达到 `unit-tested`，但安全 smoke 只创建事件对象、没有调用 `CGEventPost`，不得声明真实游戏输入有效；
+- macOS 13.0 同尺寸窗口移动 fallback 尚未闭合，因此在该基线问题解决前不得开始真实输入验收；
+- packaged `.app`、Accessibility 实际授权/撤销、稳定 bundle identity 与 shutdown release 尚未验收；
 - 不可声明中键、持续按键、locked gameplay 或 relative mouse 在游戏中有效；
 - 所有候选任务仍为 `experimental`，`MouseResetTask` 为 `unsupported`；
 - 不支持后台；
-- Stage C Windows 行为已有远端 runner 证据；Stage D Windows 回归仍需新提交的远端 runner 证明；
+- Stage C Windows 行为已有远端 runner 证据；Stage D/E 均只有本地回归，未推送、未触发远端 CI；
 - README、UI、PR 和 release note 必须采用上述较低状态。
