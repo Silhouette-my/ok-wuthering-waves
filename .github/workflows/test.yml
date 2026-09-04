@@ -40,6 +40,17 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # The integration branch imports platform contracts that are not in the
+      # currently published ok-script release. Keep CI reproducible by using an
+      # reviewed immutable sibling commit instead of a mutable branch URL.
+      - name: Check out compatible ok-script
+        uses: actions/checkout@v4
+        with:
+          repository: Silhouette-my/ok-script
+          ref: 773d599e380e10b7deba9738730eaa51d59ffa89
+          path: .ci/ok-script
+          persist-credentials: false
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -53,7 +64,9 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e ".ci/ok-script"
+          python -m pip check
 
       - name: Run tests
         env:
