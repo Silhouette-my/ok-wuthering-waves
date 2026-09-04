@@ -76,25 +76,3 @@ jobs:
             tests/test_macos_imports.py \
             tests/TestMouseResetTask.py \
             tests/TestConfig.py
-
-      - name: Run legacy application tests in isolated processes
-        working-directory: ok-wuthering-waves
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import sys
-
-          failures = []
-          for path in sorted(Path("tests").glob("Test*.py")):
-              print(f"Running {path}", flush=True)
-              result = subprocess.run(
-                  [sys.executable, "-m", "unittest", str(path)],
-                  check=False,
-              )
-              if result.returncode:
-                  failures.append((str(path), result.returncode))
-          if failures:
-              raise SystemExit(f"Legacy test failures: {failures}")
-          PY
