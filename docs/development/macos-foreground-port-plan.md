@@ -132,17 +132,36 @@ Gate:
 
 Work:
 
-- confirm scope and forbidden mechanisms with maintainers;
+- confirm contributor scope and forbidden mechanisms without inferring prior upstream-maintainer acceptance;
 - inventory unconditional Win32 dependencies and imports in `ok-script`;
-- inventory OK-WW direct OS calls and Windows-only optional features;
-- define initial capability-state matrix;
-- create ADR template/directory;
-- record upstream sync procedure and rollback expectations.
+- inventory OK-WW direct OS calls, concrete backend checks, and Windows-only optional features;
+- define the initial capability-state matrix, keeping every runtime capability at `not-implemented` until evidence advances it;
+- create ADR directories, policy, and template in both repositories;
+- record the coordinated upstream sync procedure and rollback expectations;
+- map packaging, import, target, capture, input, task, CI, and packaging blockers to Stages 2–7.
+
+Evidence:
+
+```text
+# ok-script
+docs/development/macos-stage1-platform-inventory.md
+docs/development/macos-integration-sync-and-rollback.md
+docs/development/decisions/
+
+# ok-wuthering-waves
+docs/development/macos-stage1-game-inventory.md
+docs/development/macos-capability-matrix.md
+docs/development/macos-integration-sync-and-rollback.md
+docs/development/decisions/
+docs/development/acceptance/macos-stage1-inventory.md
+```
 
 Gate:
 
-- no unresolved rule conflict;
+- no unresolved internal rule conflict;
 - inventory maps each blocker to a file and stage;
+- Windows-only implementations are distinguished from shared import blockers and are not scheduled for unnecessary rewrites;
+- rollback and ADR processes are available before runtime changes;
 - runtime implementation can proceed without changing product scope.
 
 ## Stage 2 — `ok-script` platform-safe dependencies and imports

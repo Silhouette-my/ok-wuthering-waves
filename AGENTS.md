@@ -8,6 +8,10 @@ Before changing any macOS-related code, read:
 
 - `MACOS_ENGINEERING_CONSTRAINTS.md`
 - `docs/development/macos-foreground-port-plan.md`
+- `docs/development/macos-stage1-game-inventory.md`
+- `docs/development/macos-capability-matrix.md`
+- `docs/development/macos-integration-sync-and-rollback.md`
+- `docs/development/decisions/README.md`
 - existing task skills under `.agents/skills/`, especially `ok-script-tasks` and `ok-script-i18n`
 
 The macOS MVP is intentionally narrow. Do not expand its scope without an explicit design decision.
