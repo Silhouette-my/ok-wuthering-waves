@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: macos-foreground-okww-${{ github.ref }}-${{ matrix.os }}
+  group: macos-foreground-okww-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
