@@ -203,12 +203,12 @@ config = {
         'check_night_light': True,
         'force_no_night_light': False,
     },
-    # Stage C macOS discovery hints. Bundle/application identity stays empty
-    # until it is observed from the official client. Title matches are only an
-    # auxiliary candidate filter and never authorize automatic binding.
+    # Observed from the official macOS client during Stage D hardware capture.
+    # Title matches remain an auxiliary candidate filter and never authorize
+    # automatic binding when the application identity does not match.
     'macos': {
-        'bundle_identifiers': [],
-        'application_names': [],
+        'bundle_identifiers': ['com.kurogame.mingchao'],
+        'application_names': ['鸣潮'],
         'title_patterns': [
             r'^Wuthering Waves(?:\s.*)?$',
             r'^鸣潮(?:\s.*)?$',

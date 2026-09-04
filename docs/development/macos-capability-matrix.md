@@ -4,7 +4,7 @@
 
 适用分支：`feature/macos-foreground-mvp`
 
-状态：阶段 A/B/C 的本地与远端无游戏 gate 已通过；阶段 D 的 persistent `SCStream`、frame ownership、lifecycle 与 geometry contract 已在 `ok-script` 提交 `3f27ea6601eecf3984d380e2f830bb7cc398bb90` 通过本地自动化验证。Stage D 远端 runner、真实《鸣潮》和 packaged `.app` 仍待验收。
+状态：阶段 A/B/C 的本地与远端无游戏 gate 已通过；阶段 D 的 persistent `SCStream`、actual `1920×1080` content-only frame、1000 帧、frame ownership、move/resize lifecycle 与 geometry contract 已在 `ok-script` 提交 `ee3c63d82a36a5b1867b54483f3a2cfda4f40f84` 通过本地自动化和 source-identity 硬件验证。Stage D 远端 runner 与 packaged `.app` 仍待验收；当前没有任务达到 `validated`。
 
 ## 1. 两个独立状态轴
 
@@ -78,7 +78,7 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 |---|---|---|---|---|
 | CAP-10 | 平台中立 `DesktopWindowTarget` contract | `unit-tested` | immutable snapshot、明确 coordinate-space、丢失清空与 generation contract tests | Stage D frame/geometry integration |
 | CAP-11 | 现有 HWND 行为通过 Windows adapter | `unit-tested` | composition fake `HwndWindow` adapter tests；未改 Windows capture/input 主路径 | Stage C 提交后的 Windows unit/CI regression |
-| CAP-12 | 枚举官方 Mac app/window candidates | `not-implemented` | 尚无官方客户端候选枚举证据 | 真实客户端 discovery record |
+| CAP-12 | 枚举官方 Mac app/window candidates | `hardware-validated` | 官方客户端实测为 `鸣潮` / `com.kurogame.mingchao`，PID/window ID 与 outer geometry 可枚举并绑定 | packaged `.app` identity 与 window recreation |
 | CAP-13 | PID/bundle/window binding、manual selection 与 refresh/rebind | `unit-tested` | fake adapter 覆盖稳定 hint、歧义手选、PID/window replacement、bind 前二次枚举/liveness recheck、刷新期/异常 fail closed | 官方客户端 process/window recreation hardware test |
 | CAP-14 | 观察系统 frontmost 状态 | `unit-tested` | fake adapter 覆盖实时 frontmost 观察；不使用枚举时的旧快照代替观察 | Command-Tab hardware observation |
 | CAP-15 | request activation 后确认 observed activation | `unit-tested` | contract tests 证明 request accepted 不等于 observed frontmost | real-game hardware validation |
@@ -90,14 +90,14 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 
 | ID | 能力 | 当前证据 | 已有证据 | 下一门槛 |
 |---|---|---|---|---|
-| CAP-20 | selected-window persistent `SCStream` | `unit-tested` | `SCContentFilter(desktopIndependentWindow:)`、一个显式配置的 persistent `SCStream`、protocol callback 与 fake lifecycle tests | 官方客户端真实 stream hardware test |
-| CAP-21 | BGR `uint8` `(height,width,3)` frame | `unit-tested` | synthetic BGRA、row stride、padding、crop 与 owned contiguous copy tests | official-client color/frame hardware test |
-| CAP-22 | content-only frame，无 cursor/title/border/shadow | `not-implemented` | `showsCursor=False`、contentRect crop 和可用系统上的 single-window shadow suppression 已接入；真实内容边界仍无证据 | official-client screenshot inspection |
-| CAP-23 | bounded latest-frame publication 与 ownership | `unit-tested` | 单槽 latest-frame store、overwrite、慢 consumer bounded storage 和 IOSurface 脱离 tests | 1000+ frames memory/queue hardware evidence |
-| CAP-24 | stream/window recreation 与 bounded rebind | `unit-tested` | target/capture generation、resize/scale rebuild、target loss、permission revoke、unexpected stop、stop timeout fail-closed tests | window/display/PID recreation hardware test |
-| CAP-25 | immutable geometry generation 与 stale-frame rejection | `unit-tested` | callback 前后 generation recheck、explicit invalidation、stale callback 与 start/stop race tests | hardware resize/rebind observation |
+| CAP-20 | selected-window persistent `SCStream` | `hardware-validated` | 官方客户端窗口模式 persistent stream 完成 1000 unique frames，约 29.36 FPS，无 stall | resize/display/window recreation hardware test |
+| CAP-21 | BGR `uint8` `(height,width,3)` frame | `hardware-validated` | synthetic conversion tests 加官方客户端 actual `1920×1080×3` BGR frame 与 color 视觉检查；逻辑客户区 `960×540`、Retina scale 2.0 | 离线 recognition suite |
+| CAP-22 | content-only frame，无 cursor/title/border/shadow | `hardware-validated` | AX/AppKit 识别 `960×568` 标准窗口中的顶部 28-point chrome，`sourceRect` 输出 actual `1920×1080`；视觉检查无 cursor/title/border/shadow | packaged identity；全屏/无边框不在窗口模式验收内并 fail closed |
+| CAP-23 | bounded latest-frame publication 与 ownership | `hardware-validated` | 最终 1000 unique frames 中 received/published 1001、storage size 1、incomplete/stale/conversion error 0；另有 ownership/overwrite tests | 更长时段 leak observation 与 packaged app |
+| CAP-24 | stream/window recreation 与 bounded rebind | `hardware-validated` | 临时标准 AppKit 窗口 move/resize 两次触发旧帧失效与 stream rebuild，target generation `1→2→3`；另有 target loss、permission revoke、unexpected stop、stop timeout fail-closed tests | 官方客户端 display/window/PID recreation hardware test |
+| CAP-25 | immutable geometry generation 与 stale-frame rejection | `hardware-validated` | `SCStreamFrameInfoScreenRect` 驱动 move/resize geometry invalidation；临时窗口验证新 generation 恢复到正确位置/尺寸，另有 callback race tests | macOS 13.0 move fallback 与官方客户端 rebind |
 | CAP-26 | frame pixel → global logical/CGEvent coordinate | `unit-tested` | scale 1.0/2.0/1.5、offset、crop、positive Mac logical geometry tests | actual game four-corner coordinate hardware validation |
-| CAP-27 | 1920×1080 1000+ continuous frames | `not-implemented` | 尚无真实连续帧证据 | official-client FPS/frame-age/leak/queue evidence |
+| CAP-27 | 1920×1080 1000+ continuous frames | `hardware-validated` | 官方客户端窗口模式 actual `1920×1080×3` 完成 1000 unique frames，34.295 s、约 29.24 FPS，单槽且无 stall/error；逻辑客户区为 `960×540`、Retina scale 2.0 | packaged `.app` 与更长时段 leak observation |
 | CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `unit-tested` | diagnostics 提供 FPS、frame age、overwrite/drop、target/capture generation、geometry、invalidation 与 rebuild；posted coordinate 留待 Stage E | hardware capture diagnostics + Stage E posted-coordinate trace |
 
 ## 7. Foreground input 与安全
@@ -122,7 +122,7 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 
 | ID | 能力 | 当前证据 | 下一门槛 |
 |---|---|---|---|
-| CAP-50 | 真实 Mac game matching config | `not-implemented` | 阶段 C 实测 bundle/app/window hints |
+| CAP-50 | 真实 Mac game matching config | `hardware-validated` | 官方客户端实测 `com.kurogame.mingchao` / `鸣潮` 并写入独立 `macos` hints | 地区/语言变体与 packaged app 验证 |
 | CAP-51 | Mac logical key set / game hotkeys | `not-implemented` | Quartz map unit + official-client key validation |
 | CAP-52 | `CombatCheck` 不直接调用 Win32，使用 framework cursor seam | `unit-tested` | import/unit tests 通过；Mac CursorService 未实现 | 阶段 E/F hardware |
 | CAP-53 | `MouseResetTask` Mac P0 显式 unsupported | `unit-tested` | capability declaration/preflight test | UI 文案和 packaged behavior |
