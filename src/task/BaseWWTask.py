@@ -11,6 +11,11 @@ from ok import CannotFindException
 import cv2
 
 from src.Labels import Labels
+from src.macos_capabilities import (
+    MacTaskSupportStatus,
+    MacTaskUnsupportedError,
+    get_macos_task_compatibility,
+)
 from src.scene.WWScene import WWScene
 
 logger = Logger.get_logger(__name__)
@@ -37,6 +42,44 @@ class BaseWWTask(BaseTask):
         self.key_config = self.get_global_config('Game Hotkey')  # 游戏热键配置
         self.next_monthly_card_start = 0
         self.scene: WWScene | None = None
+
+    def get_macos_compatibility(self):
+        return get_macos_task_compatibility(self)
+
+    def _uses_macos_provider(self) -> bool:
+        manager = getattr(self.executor, 'device_manager', None)
+        device = manager.get_preferred_device() if manager else None
+        return bool(device and device.get('device') == 'macos')
+
+    def get_required_capabilities(self):
+        if self._uses_macos_provider():
+            return self.get_macos_compatibility().required
+        return super().get_required_capabilities()
+
+    def get_device_compatibility_state(self) -> dict:
+        state = super().get_device_compatibility_state()
+        if not self._uses_macos_provider():
+            return state
+        compatibility = self.get_macos_compatibility()
+        state['level'] = compatibility.level.value if compatibility.level else None
+        if compatibility.status is MacTaskSupportStatus.UNSUPPORTED:
+            return {
+                'status': 'unsupported',
+                'level': state['level'],
+                'missing': (),
+                'reason': compatibility.note,
+            }
+        state['reason'] = compatibility.note
+        if state['status'] == 'compatible':
+            state['status'] = compatibility.status.value
+        return state
+
+    def ensure_device_capabilities(self) -> None:
+        if self._uses_macos_provider():
+            compatibility = self.get_macos_compatibility()
+            if compatibility.status is MacTaskSupportStatus.UNSUPPORTED:
+                raise MacTaskUnsupportedError(self.name, compatibility)
+        super().ensure_device_capabilities()
 
     @property
     def logged_in(self):

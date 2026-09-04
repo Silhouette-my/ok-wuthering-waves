@@ -12,6 +12,8 @@ Starting `upstream/master`: `a24c30f2ec90e56e40287bb76caf7c3a52266d77`
 
 This inventory maps current game-repository portability blockers to implementation stages. It changes no runtime behavior and claims no macOS automation support.
 
+> 方向更新（2026-09-04）：本文件保留为 Stage 1 历史审计。后续任务能力分级、relative mouse 门槛和 A–H 实施顺序以 `MACOS_ENGINEERING_CONSTRAINTS.md`、`docs/development/macos-work-branch-direction-audit.md`、`docs/development/macos-capability-matrix.md` 与 `docs/development/macos-foreground-port-plan.md` 为准。relative mouse 不再是所有 Mac MVP/战斗/移动任务的统一阻断项。
+
 ## 1. Scope confirmation
 
 The contributor branch remains bound to `MACOS_ENGINEERING_CONSTRAINTS.md`:
@@ -103,16 +105,17 @@ Unknowns that remain `not-implemented` until evidence exists:
 - template/OCR compatibility;
 - CPU inference correctness and performance;
 - hotkey equivalence in the official Mac client;
-- task compatibility, especially camera-dependent combat and routes.
+- task compatibility, including held-key/middle-button locked gameplay and any future free-camera route.
 
-Stage 6 bring-up order remains:
+Updated bring-up order:
 
 1. offline/diagnostic normalized frames;
-2. simple menu click flow;
-3. Auto Pick or another simple trigger flow;
-4. fixed-domain/basic combat only after relative camera input passes;
-5. map/route flows;
-6. broad task matrix.
+2. simple `MAC_BASIC` menu/click/claim flow;
+3. Auto Pick or another key-tap trigger;
+4. held W/A/S/D, middle-button and button-hold combinations;
+5. representative `MAC_LOCKED_GAMEPLAY` flow if those capabilities pass;
+6. relative mouse only for tasks that explicitly require `MAC_FULL_CAMERA`;
+7. broad task matrix.
 
 Mac-specific assets are allowed only after reproducible same-resolution evidence shows that geometry/normalization/threshold changes would damage Windows recognition.
 

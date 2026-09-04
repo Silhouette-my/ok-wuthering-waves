@@ -1,6 +1,6 @@
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from ok import Box, ConfigOption, Icon
 from src.task.process_feature import process_feature
@@ -112,7 +112,9 @@ def _find_pc_exe_near_registered_path(registered_path):
 def calculate_pc_exe_path(running_path):
     if running_path is None:
         return _find_most_recently_run_pc_exe() or _find_pc_exe_from_registry()
-    game_exe_folder = Path(running_path).parents[3]
+    # This callback always receives a Windows executable path. Parse it with
+    # Windows semantics even when its pure behavior is tested from macOS.
+    game_exe_folder = PureWindowsPath(running_path).parents[3]
     return str(game_exe_folder / "Wuthering Waves.exe")
 
 

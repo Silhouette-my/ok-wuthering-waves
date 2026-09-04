@@ -1,503 +1,592 @@
-# OK-WW Native macOS Foreground Port — Integration Plan
+# OK-WW 原生 macOS 前台模式——长期工作分支实施方案
 
-Status: implementation plan
+状态：**实施计划；不得削弱 `MACOS_ENGINEERING_CONSTRAINTS.md`**
 
-Scope: **foreground-only native Mac client**
+目标：Apple Silicon arm64、macOS 13+、Python 3.12 arm64、官方《鸣潮》Mac 客户端、1920×1080 首个硬件验收、CPU OCR/推理
 
-Target: Apple Silicon, macOS 13+, Python 3.12 arm64
+分支：`ok-script` 与 `ok-wuthering-waves` 的 `feature/macos-foreground-mvp`
 
-Normative contract: `MACOS_ENGINEERING_CONSTRAINTS.md`
+本文件描述同一长期分支内的执行顺序，不要求拆分阶段性 PR。所有能力在有对应证据前保持 `not-implemented`，所有任务在真机端到端通过前不得标为 `validated`。
 
-This plan defines sequencing and evidence. It cannot weaken the normative constraints. Deliberate deviations require an ADR before implementation proceeds.
-
-## 1. Goal
-
-On a supported Apple Silicon Mac, a user can launch the official Wuthering Waves client and OK-WW, grant normal macOS permissions, select the game window, run a task while the game remains frontmost, and have automation stop safely when focus or another required state is lost.
-
-Target architecture:
+## 1. 总体目标
 
 ```text
-Official Wuthering Waves Mac client
+官方《鸣潮》Mac 客户端
         │
-        ├── app/window target: AppKit + ScreenCaptureKit metadata
-        ├── capture: persistent ScreenCaptureKit SCStream
-        └── input: Quartz/Core Graphics foreground events
+        ├── AppKit + ScreenCaptureKit metadata：窗口发现、选择、重绑
+        ├── persistent SCStream：连续内容帧
+        └── Quartz/Core Graphics：仅前台输入
                          │
                          ▼
                     ok-script
-             reusable platform contracts
+        target / capture / input / permission / capability
                          │
                          ▼
-             existing OK-WW task, OCR,
-             template and combat logic
+                  OK-WW 游戏集成
+        OCR / template / color / YOLO / task compatibility
 ```
 
-The first release does not support background/minimized control, BetterDisplay, virtual displays, private APIs, process injection, Metal hooks, Android emulation, or input while another application is frontmost.
+最终用户路径：
 
-## 2. Repository ownership
+1. 用户从正常安装位置启动官方游戏和 OK-WW；
+2. OK-WW 发现或让用户选择真实游戏窗口；
+3. 用户授予 Screen Recording 和 Accessibility；
+4. 持久 `SCStream` 发布最新 BGR 内容帧；
+5. 任务按当前 provider capabilities 进行执行前门控；
+6. 任务开始时可请求一次激活，并等待观察到游戏成为 frontmost；
+7. 每个普通输入或短原子批次前重新验证 PID、frontmost、input gate 和 geometry generation；
+8. 失焦、目标消失、权限失效、fatal capture、task stop 或 app exit 时立即阻断普通输入并 `release_all()`。
+
+本计划不增加后台/最小化控制、BetterDisplay、虚拟显示器、私有 API、`CGEvent.postToPid`、进程注入、Metal hook、TCC 绕过或 MaaFramework 运行时依赖。
+
+## 2. 当前分支基线
+
+### 已完成
+
+- Stage 0：工作区、fork、remotes、长期分支、参考 arm64 Python 3.12 环境、初始 install/import/test 证据；
+- Stage 1：平台阻塞清单、任务/游戏阻塞清单、ADR、upstream sync 与 rollback 说明。
+
+### 当前工作树正在完成
+
+旧 Stage 2 的平台安全工作与本次方向调整合并为新的阶段 A/B：
+
+- dependency marker；
+- deterministic editable build；
+- capture/interaction/Qt/notification lazy import；
+- CursorService seam；
+- `DeviceCapabilities`；
+- task enable/execute preflight；
+- OK-WW task compatibility declaration；
+- 中文约束和验收文档；
+- Darwin import 与 capability tests。
+
+在提交、推送和 Windows/macOS CI 结果确认前，不将阶段 B 标为完成。
+
+## 3. 仓库职责
 
 ### `ok-script`
 
-Owns reusable capabilities:
+负责：
 
-- platform-neutral desktop target and Windows adapter;
-- macOS application/window discovery;
-- ScreenCaptureKit capture;
-- Quartz foreground input;
-- focus guard and held-state release;
-- cursor and permission services;
-- geometry and coordinate conversion;
-- platform provider routing, dependencies, imports, lifecycle, and tests.
+- 平台安全依赖和 import/provider selection；
+- `DeviceCapabilities` 和 generic task preflight；
+- `DesktopWindowTarget` 与 Windows adapter；
+- macOS window discovery/rebind；
+- permission service；
+- persistent `ScreenCaptureKitCaptureMethod`；
+- geometry snapshot/generation；
+- `QuartzForegroundInteraction`；
+- Mac key map；
+- `ForegroundGuard`；
+- `HeldInputState` / `release_all()`；
+- `CursorService`；
+- 通用 diagnostics 和 tests。
 
 ### `ok-wuthering-waves`
 
-Owns game integration:
+负责：
 
-- verified application/window matching hints;
-- game hotkey defaults;
-- CPU inference configuration;
-- removal of direct Win32 cursor calls in `CombatCheck` and `MouseResetTask`;
-- task compatibility decisions;
-- evidence-driven Mac asset overrides;
-- OK-WW user documentation, permissions, limitations, and troubleshooting.
+- 真实客户端 app/window hints；
+- Mac hotkey choices；
+- CPU inference / NPU off；
+- task capability requirements；
+- task status 与兼容矩阵；
+- evidence-driven visual overrides；
+- user-facing permission/focus/install/limitations docs；
+- real-game task evidence。
 
-Do not create an OK-WW-local capture/input backend or `win32api`-shaped compatibility shim.
+不得在 OK-WW 私建 Mac capture/input backend 或 `win32api` 外形 shim。
 
-## 3. Workspace and branch workflow
+## 4. 能力与任务模型
 
-Use sibling repositories:
+### 4.1 provider capabilities
 
-```text
-workspace/
-├── okww-macos-foreground-plan/
-├── ok-script/
-└── ok-wuthering-waves/
-```
-
-For each source repository:
-
-- `origin` → contributor fork;
-- `upstream` → `ok-oldking` canonical repository;
-- integration branch → `feature/macos-foreground-mvp` from a recorded `upstream/master` SHA;
-- push development commits only to the contributor fork;
-- keep commits small and bisectable;
-- do not open incremental MVP PRs.
-
-Development dependency connection:
-
-```bash
-python3.12 -m venv .venv
-./.venv/bin/python -m pip install -U pip
-./.venv/bin/python -m pip install -e "../ok-script[ocr,qt]"
-./.venv/bin/python -m pip install -e ".[dev]"
-```
-
-The initial install is expected to expose the current unconditional Windows dependencies. Record the failure; do not hide it with `--no-deps`, temporary wheels, a mutable branch URL, or global Python state.
-
-## 4. Stage sequence
-
-## Stage 0 — Workspace bootstrap and baseline evidence
-
-Deliverables:
-
-- writable contributor forks for both repositories;
-- sibling local checkouts;
-- verified `origin` and `upstream` remotes;
-- matching integration branches and starting upstream SHAs;
-- Apple Silicon/macOS/Xcode/Clang/Git/Python 3.12 baseline;
-- OK-WW local `.venv`;
-- repository constraints and agent instructions on actual branches;
-- hardened `.gitignore` rules;
-- dependency install/import/test baseline;
-- committed and pushed bootstrap changes with no PR.
-
-Evidence file:
+`ok-script.DeviceCapabilities` 至少包含：
 
 ```text
-docs/development/acceptance/macos-stage0-bootstrap.md
+keyboard_tap
+keyboard_hold
+absolute_mouse
+mouse_left
+mouse_right
+mouse_middle
+mouse_button_hold
+scroll
+relative_mouse
+foreground_only
 ```
 
-Non-goals: no window discovery, capture, input, task, visual, or packaging implementation.
+全部默认 `False`。后端只有在实现和 fail-closed 语义真实存在时才能置 `True`。
 
-Gate:
+### 4.2 task levels
 
-- forks/remotes/branches/SHAs are recorded;
-- constraints exist in both checkouts;
-- reference environment and `.venv` exist;
-- expected baseline failures are recorded and assigned to later stages;
-- bootstrap commits are pushed to contributor forks;
-- both worktrees are clean.
+- `MAC_BASIC`：菜单、登录、领取、合成、背包、强化、固定页面 OCR/模板和绝对点击；
+- `MAC_LOCKED_GAMEPLAY`：持续 W/A/S/D、中键锁敌/居中、左右键保持和键鼠组合，不要求自由镜头；
+- `MAC_FULL_CAMERA`：任意 relative X/Y、连续 delta、精确路线转向。
 
-## Stage 1 — Guardrail confirmation and implementation inventory
+等级用于验收分组；每个任务仍声明精确 capability requirement。
 
-Work:
+### 4.3 task status 与 evidence
 
-- confirm contributor scope and forbidden mechanisms without inferring prior upstream-maintainer acceptance;
-- inventory unconditional Win32 dependencies and imports in `ok-script`;
-- inventory OK-WW direct OS calls, concrete backend checks, and Windows-only optional features;
-- define the initial capability-state matrix, keeping every runtime capability at `not-implemented` until evidence advances it;
-- create ADR directories, policy, and template in both repositories;
-- record the coordinated upstream sync procedure and rollback expectations;
-- map packaging, import, target, capture, input, task, CI, and packaging blockers to Stages 2–7.
+任务状态：`validated`、`experimental`、`unsupported`。
 
-Evidence:
+provider evidence：`not-implemented`、`unit-tested`、`hardware-validated`、`packaged-app-validated`。
+
+二者独立。单元测试通过只可推进 provider contract，不会把 task 标为 `validated`。
+
+### 4.4 当前方向
+
+当前登记任务的静态审计没有发现自由镜头 delta 调用；`center_camera()` 是屏幕中心中键点击。实施优先级改为：
 
 ```text
-# ok-script
-docs/development/macos-stage1-platform-inventory.md
-docs/development/macos-integration-sync-and-rollback.md
-docs/development/decisions/
+基础键鼠
+→ 持续按键/中键/按钮保持
+→ OK-WW 实际组合
+→ 对应任务端到端
+→ 最后验证 relative mouse
+```
 
-# ok-wuthering-waves
-docs/development/macos-stage1-game-inventory.md
+relative mouse 不再阻断已经通过的 `MAC_BASIC` 或 `MAC_LOCKED_GAMEPLAY`；它只阻断明确要求 `MAC_FULL_CAMERA` 的任务和完整 camera/route parity 声明。
+
+## 5. 阶段 A——现状审计与方向修订
+
+### 工作
+
+1. 搜索两个仓库中的：
+   - `win32`、`windll`、`WinDLL`、`winreg`；
+   - `Hwnd` / `HWND`；
+   - `send_key_down` / `send_key_up`；
+   - `middle_click`；
+   - `mouse_down` / `mouse_up`；
+   - `move_relative`、camera 和其他相对输入；
+2. 区分 shared import blocker、Windows-only implementation 和 game task dependency；
+3. 输出当前分支真实状态和差距清单；
+4. 修订中文约束，取消 relative mouse 全局阻断；
+5. 明确当前 17 个登记任务的 level、required capabilities 和 status；
+6. 保持 foreground-only 边界。
+
+### 产物
+
+```text
+# OK-WW
+docs/development/macos-work-branch-direction-audit.md
+MACOS_ENGINEERING_CONSTRAINTS.md
+docs/development/macos-foreground-port-plan.md
 docs/development/macos-capability-matrix.md
-docs/development/macos-integration-sync-and-rollback.md
-docs/development/decisions/
-docs/development/acceptance/macos-stage1-inventory.md
+src/macos_capabilities.py
+
+# ok-script
+docs/development/macos-foreground-platform-constraints.md
+docs/development/macos-stage2-direction-adjustment.md
 ```
 
-Gate:
+### Gate
 
-- no unresolved internal rule conflict;
-- inventory maps each blocker to a file and stage;
-- Windows-only implementations are distinguished from shared import blockers and are not scheduled for unnecessary rewrites;
-- rollback and ADR processes are available before runtime changes;
-- runtime implementation can proceed without changing product scope.
+- 文档不再包含“relative mouse 失败则整个 MVP 不能发布”；
+- 所有登记任务有显式 declaration；
+- 未声明任务默认 fail closed；
+- 没有把任何未真机测试任务标为 `validated`。
 
-## Stage 2 — `ok-script` platform-safe dependencies and imports
+## 6. 阶段 B——平台安全 build/import 与 capability gate
 
-Goals:
+### `ok-script` 工作
 
-- install/import shared framework code on macOS;
-- preserve Windows behavior;
-- no production Mac capture or input yet.
+- 修正普通 PEP 517/editable build 的网络/未声明构建依赖；
+- 对 Windows-only packages 添加 marker；
+- 声明最小 Darwin PyObjC wrappers；
+- 拆 common/Windows key map；
+- capture/interaction exports lazy/platform-selected；
+- `DeviceManager` 在 provider selection 后才加载 platform implementation；
+- Qt start/debug、overlay、notification、process、analytics 等 shared import 不加载 Win32；
+- `CursorService` 平台 seam；
+- `DeviceCapabilities` 和全 False 默认；
+- task enable 和 execution 前 capability preflight。
 
-Work:
+### OK-WW 工作
 
-- add environment markers for Windows-only packages;
-- declare minimal macOS PyObjC wrappers;
-- split common/Windows/macOS/ADB/browser key maps;
-- make capture and interaction exports lazy/platform-selected;
-- guard process/window/overlay/notification utilities;
-- refactor DeviceManager provider imports;
-- add Darwin and Windows import smoke tests.
+- `CombatCheck.py` 使用 framework CursorService；
+- `MouseResetTask.py` 不直接导入 Win32，并在 Mac P0 明确 `unsupported`；
+- `WWOneTimeTask.py` 不判断具体 `PostMessageInteraction` 类型；
+- 所有 entry/task/scene/custom tab 可在 Darwin 导入；
+- 注册任务映射到 macOS compatibility declaration。
 
-Gate:
+### 无游戏 Gate
 
 ```bash
+# 从 OK-WW venv
+./.venv/bin/python -m pip install -e "../ok-script[ocr,qt,dev]"
+./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/python -m pip check
+
 ./.venv/bin/python -c "import ok"
 ./.venv/bin/python -c "from ok.device.DeviceManager import DeviceManager"
+./.venv/bin/python -c "import src"
+
+# ok-script
+../ok-wuthering-waves/.venv/bin/python -m pytest -q
+
+# OK-WW
+./.venv/bin/python -m pytest -q tests/test_macos_imports.py tests/test_macos_capabilities.py
+./.venv/bin/python -m unittest discover -s tests -p 'Test*.py'
 ```
 
-Both succeed on macOS without Win32 modules, task discovery imports, and Windows tests remain green.
+验证 Darwin `sys.modules` 中没有 Win32-only backend。Windows CI 必须对 changed paths 保持绿色。
 
-## Stage 3 — Desktop target abstraction and Mac discovery
+## 7. 阶段 C——`DesktopWindowTarget`、真实窗口与权限
 
-Implement:
+### `ok-script` 实现
 
-- platform-neutral desktop target contract;
-- Windows adapter around existing `HwndWindow` behavior;
-- macOS app/window enumeration and selection data;
-- PID/bundle/window identity;
-- observed frontmost state and activation;
-- process/window refresh and rebind diagnostics.
-
-Selection strategy:
-
-1. enumerate shareable content;
-2. join windows to owning applications/PIDs;
-3. apply verified game hints and plausible geometry;
-4. allow explicit selection for ambiguity;
-5. persist stable hints, not stale PID/window IDs.
-
-Gate on the real game:
-
-- correct process/window is visible;
-- PID, bundle ID, window ID, title, and geometry are reported;
-- activation is observed rather than assumed;
-- Command-Tab state changes are detected;
-- process exit and window replacement are detected.
-
-## Stage 4 — Persistent ScreenCaptureKit backend
-
-Implement:
+平台中立 contract 至少包含：
 
 ```text
-SCShareableContent
-  → selected SCWindow
-  → SCContentFilter(desktopIndependentWindow:)
-  → SCStreamConfiguration
-  → persistent SCStream
-  → bounded latest-frame publication
-  → owned BGR numpy.ndarray
+process_id
+window_id
+bundle_identifier
+application_name
+title
+outer_geometry
+content_geometry
+capture_geometry
+display_scale
+generation
+exists()
+is_foreground()
+request_activation()
+wait_for_observed_activation()
+refresh()/rebind()
 ```
 
-Rules:
+Windows adapter 包装现有 `HwndWindow`，尽量不改行为。
 
-- cursor disabled;
-- content area only;
-- no per-frame screenshot requests;
-- no OCR/task/Qt work in callback;
-- BGRA/stride/padding handled deterministically;
-- frame and geometry generations tracked;
-- old frame invalidated on resize/rebind;
-- permission and stream failures become actionable states with bounded backoff.
+macOS discovery：
 
-Tests:
+1. 低频获取 `SCShareableContent`；
+2. 将 `SCWindow` 与 owning application/PID 关联；
+3. 应用 bundle ID、标题、尺寸、层级等组合过滤；
+4. 多候选时让用户明确选择；
+5. 持久化稳定 hints，不持久化旧 PID/window ID；
+6. 进程/窗口重建后重新绑定并提升 generation。
 
-- shape/dtype/channel order;
-- row stride and padding;
-- memory ownership after publication;
-- bounded queue/latest frame;
-- generation invalidation;
-- scale/origin conversion.
+### OK-WW 实现
 
-Hardware gate:
+- 在真实官方客户端上记录 bundle identifier、应用名、窗口标题和窗口特征；
+- 在 `config.py` 添加独立 `macos` block；
+- 不复用 `windows` block，不猜唯一 bundle ID；
+- 提供手动选择兜底。
 
-- normalized 1920×1080 BGR frames;
-- no cursor/title bar/border;
-- correct color;
-- at least 1000 consecutive frames without stall or queue growth;
-- FPS/frame age observable;
-- resize/rebind has a clear result.
+### permission service
 
-## Stage 5 — Quartz foreground input and fail-closed state
+- Screen capture preflight/request；
+- Accessibility trust/prompt；
+- 明确 permission-required/revoked 状态；
+- 无 tight retry；
+- 不修改 TCC。
 
-Implement:
+### 早期 packaged identity checkpoint
 
-- Mac virtual key map;
-- key tap/down/up;
-- left/right/middle mouse down/up/click;
-- absolute movement;
-- scroll where required;
-- relative/delta movement;
-- foreground guard;
-- held-state tracking;
-- idempotent `release_all()`;
-- explicit focus-loss pause/stop signal;
-- shutdown ordering.
+窗口/权限 seam 建立后，即建立稳定 bundle identifier 的内部 `.app` 骨架，尽早验证 TCC identity，而不是等全部 task 完成。
 
-Safety ordering:
+### Hardware Gate
+
+- 发现正确 app/window；
+- 展示 PID、bundle ID、window ID、outer/content geometry 和 scale；
+- 手动选择有效；
+- activation 必须观察到 frontmost；
+- Command-Tab 状态变化；
+- process exit、window replacement 和 PID 变化可检测；
+- source identity 和 stable `.app` identity 的 permission 状态分别记录。
+
+## 8. 阶段 D——持久 ScreenCaptureKit 流和几何
+
+### 生产架构
 
 ```text
-verify target exists
-→ verify bound process
-→ verify frontmost
-→ publish short event/batch
+selected SCWindow
+→ SCContentFilter(desktopIndependentWindow:)
+→ one SCStreamConfiguration
+→ persistent SCStream
+→ CMSampleBuffer callback
+→ newest complete frame only
+→ owned BGR ndarray
 ```
 
-On invalidation:
+### 实现要求
 
-```text
-block new ordinary input
-→ emit only matching up events for held state
-→ clear internal state
-→ pause/stop with an explicit reason
-```
+- `showsCursor = false`；
+- callback 不运行 OCR/task/Qt；
+- 不每帧调用 `SCShareableContent`；
+- 不每帧重建 filter/config；
+- 不使用每帧 `SCScreenshotManager`；
+- storage 有界，只保留最新完整帧；
+- 处理 BGRA、row stride、padding 和 lifetime；
+- frame 是 BGR `uint8` `(h,w,3)`；
+- 内容区不含标题栏、边框、阴影；
+- frame 与 immutable geometry generation 绑定；
+- rebind/resize/scale change 开始时立即失效旧帧。
 
-Hardware gate:
+### 几何模型
 
-- W tap and hold/release;
-- E/Q/R/F, Space, Shift, Tab;
-- left/middle/right button behavior;
-- absolute click mapping;
-- camera delta X/Y;
-- W + attack + camera;
-- Command-Tab while holding keys/buttons produces no ordinary input in the new app;
-- stop/exit releases state.
+明确区分：
 
-Relative camera failure blocks combat/route support claims.
+- macOS global logical point；
+- `SCWindow.frame` outer frame；
+- actual stream pixel frame；
+- game content area；
+- Qt logical coordinate；
+- display scale；
+- internal render resolution。
 
-## Stage 6 — OK-WW integration
-
-Change:
-
-- add a verified `macos` device configuration;
-- disable/ignore NPU on Darwin and use a proven arm64 CPU inference path;
-- replace `CombatCheck` cursor calls with framework CursorService;
-- replace or explicitly disable Windows-only `MouseResetTask` behavior through framework capabilities;
-- declare task compatibility where needed;
-- add user-visible permission/focus states and translations;
-- validate existing recognition on normalized Mac frames.
-
-Bring-up order:
-
-1. screenshot and feature diagnostics;
-2. simple menu click flow;
-3. Auto Pick or another simple trigger flow;
-4. fixed-domain/basic combat;
-5. map/route flows;
-6. broad task matrix.
-
-Visual validation groups:
-
-- login/entry;
-- overworld HUD and team state;
-- skill/liberation/echo readiness;
-- F interaction;
-- guidebook/map/teleport;
-- stamina/claim/confirmation;
-- backpack/echo enhancement;
-- domain start/result;
-- combat target/lock state.
-
-Prefer geometry/normalization/threshold fixes. Add `assets/macos` only for reproducible platform-specific differences that cannot be fixed without harming Windows.
-
-## Stage 7 — CI and packaged application
-
-CI:
-
-- Python 3.12 macOS job;
-- dependency install;
-- import smoke;
-- all task imports;
-- provider, geometry, capture-contract, held-state, focus and shutdown tests;
-- no game requirement;
-- existing Windows CI remains green.
-
-After source mode is stable:
-
-- build an internal `.app` through the supported PySide deployment path, preferring `pyside6-deploy`/Nuitka;
-- use a stable bundle identifier;
-- verify arm64 libraries, Qt plugins, OpenCV/inference/PyObjC, assets and i18n;
-- validate Screen Recording and Accessibility under the packaged identity;
-- verify application shutdown releases input and capture resources.
-
-Public release additionally requires Developer ID Application signing, Hardened Runtime, secure timestamp, notarization, stapling and Gatekeeper validation in a clean environment.
-
-## Stage 8 — Acceptance freeze and final MVP PRs
-
-Freeze feature scope and run the complete automated and manual matrix.
-
-Required evidence:
-
-- Windows and macOS automated results;
-- real-hardware window/capture/keyboard/mouse/camera/focus-loss results;
-- Mac model, architecture, macOS version, game version, resolution and window mode;
-- packaged-app permission behavior;
-- supported and unsupported task list;
-- known limitations and rollback notes;
-- immutable cross-repository dependency relationship.
-
-Only then open one cohesive MVP PR in each affected repository and link them as one delivery unit.
-
-## 5. File-level map
-
-### `ok-script`
-
-Likely areas:
-
-```text
-pyproject.toml
-ok/device/DeviceManager.py
-ok/device/capture_methods/
-ok/device/interaction_methods/
-ok/device/window_targets/
-ok/device/services/
-ok/util/process.py
-ok/util/window.py
-ok/ui/overlay/
-ok/notification/
-tests/
-```
-
-Illustrative new shape:
-
-```text
-ok/device/
-├── capture_methods/
-│   ├── base.py
-│   ├── windows/
-│   └── macos/screencapturekit.py
-├── interaction_methods/
-│   ├── base.py
-│   ├── windows/
-│   └── macos/
-│       ├── keys.py
-│       └── quartz_foreground.py
-├── window_targets/
-│   ├── base.py
-│   ├── windows.py
-│   └── macos.py
-└── services/
-    ├── cursor.py
-    └── permissions.py
-```
-
-Use a smaller refactor when it preserves compatibility better; ownership matters more than directory aesthetics.
-
-### `ok-wuthering-waves`
-
-```text
-config.py
-src/combat/CombatCheck.py
-src/task/MouseResetTask.py
-assets/macos/                 # only when evidence requires
-.github/workflows/test.yml
-docs/
-i18n/
-```
-
-## 6. Test architecture
+视觉尺寸以 actual frame 为事实来源。不得直接把 `SCWindow.frame.width/height` 当成内容像素。
 
 ### Unit tests
 
-Provider selection:
+- BGRA→BGR；
+- stride/padding；
+- publication ownership；
+- newest overwrite；
+- bounded storage；
+- resize/rebind generation；
+- scale 1.0/2.0/非整数假设；
+- offsets；
+- title-bar/content crop；
+- frame pixel→global logical point；
+- stale generation rejection。
 
-- Windows chooses Windows providers;
-- Darwin chooses Mac providers;
-- Darwin does not load Win32;
-- Windows does not require PyObjC.
+### Hardware Gate
 
-Geometry:
+- 1920×1080 内容帧；
+- 无 cursor/title/border/shadow；
+- color 正确；
+- 1000+ frames 无 stall、明显 leak 或 queue growth；
+- FPS、frame age、overwrite、generation、rebuild 可观测；
+- resize/rebind 有明确恢复或终止状态。
 
-- frame pixel to screen point;
-- scale 1.0, 2.0 and observed non-integer scale;
-- origin offsets;
-- resize and generation replacement;
-- stale generation rejection.
+## 9. 阶段 E——Quartz 基础输入与 fail-closed 安全
 
-Held input:
+### Mac key map
 
-- down adds state;
-- up removes state;
-- repeated down behavior is intentional;
-- `release_all()` is best-effort and idempotent;
-- one release error does not prevent the rest;
-- state is cleared after release attempts.
+任务继续使用逻辑键名；后端统一转换到 `CGKeyCode`。覆盖 OK-WW 实际使用的：
 
-Focus/concurrency:
+```text
+w a s d
+e q r f t
+space shift tab
+f2 b 1 2 3
+esc enter alt ...
+```
 
-- correct PID permits ordinary input;
-- other PID or missing target rejects it;
-- invalidation closes the input gate;
-- no ordinary event follows invalidation;
-- release path emits only recorded up events;
-- task receives an explicit pause/stop reason.
+### 基础接口
 
-Capture:
+```text
+send_key
+send_key_down / send_key_up
+left/right/middle down/up/click
+mouse button hold
+absolute move/click
+scroll
+release_all
+```
 
-- synthetic BGRA buffers;
-- dimensions, stride, padding, BGR conversion and alpha removal;
-- publication ownership;
-- latest-frame/bounded-buffer behavior;
-- fatal/rebind states.
+relative/delta 在同一 backend 中作为独立 capability，不阻塞基础接口完成。
 
-### Integration tests without game
+### `ForegroundGuard`
 
-- deterministic adapters around Apple API boundaries;
-- optional shareable-content diagnostics outside required CI;
-- headless/offscreen Qt where supported;
-- application and all task modules import;
-- no permission prompt in deterministic unit tests.
+任务开始可以 request activation once，然后等待 observed frontmost。每个事件/short batch 前：
 
-### Real hardware
+```text
+target exists / PID alive
+→ target app is frontmost
+→ input gate open
+→ geometry generation current
+→ post CGEvent
+```
 
-Record separately; GitHub Actions does not install the game. Validate at least one supported M1-class or later machine, and more than one supported macOS major version where practical.
+失焦时不得自动抢回焦点，不得 post-to-PID，不得向当前其他前台 app 发送普通输入。
 
-## 7. Failure-state design
+### `HeldInputState`
 
-Use explicit states such as:
+跟踪 held keys、held buttons、owner/batch、invalidated/shutdown 和 generation。
+
+`release_all()`：
+
+- 幂等；
+- target vanished 后安全；
+- 单个 release 失败继续；
+- 最终清空内部 state；
+- invalidated path 只发布已记录 key-up/button-up。
+
+### Lifecycle
+
+focus loss、task cancel、executor stop、device switch、target exit、fatal capture、permission loss 和 app exit 都必须 release。
+
+shutdown：block ordinary input → release → stop stream/workers → destroy objects。
+
+### Unit Gate
+
+- key/button state transitions；
+- duplicate down policy；
+- one release failure；
+- idempotent release；
+- focus race；
+- no ordinary event after invalidation；
+- target exit；
+- capture/permission failure；
+- shutdown order；
+- task receives explicit reason。
+
+## 10. 阶段 F——真实 OK-WW 输入验收
+
+### 第一优先级
+
+- key tap；
+- key down/up；
+- W/A/S/D hold；
+- E/Q/R/F/Space/Shift/Tab；
+- left/right/middle；
+- mouse button hold；
+- absolute click；
+- scroll。
+
+### 第二优先级
+
+- W + left；
+- W + skill key；
+- W + middle；
+- middle lock/center；
+- right-button hold；
+- change direction releases old key；
+- task stop/focus loss clears all state。
+
+### 安全人工测试
+
+```text
+hold W → Command-Tab 到文本编辑器
+hold Shift/right/middle → 切换应用
+持续输入时退出游戏
+持续输入时关闭 OK-WW
+运行时撤销 Accessibility
+运行时撤销 Screen Recording
+```
+
+每个场景都必须：不向新 app 泄漏字符/点击；所有 held state 清空；task 明确暂停/停止；不得自动抢焦点恢复。
+
+### 第三优先级：relative mouse
+
+在 basic/locked inputs 之后验证：
+
+- X/Y；
+- continuous delta；
+- movement/attack concurrency；
+- cursor drift/recovery；
+- game cursor lock state。
+
+失败只限制 `MAC_FULL_CAMERA`，不推翻已通过的 basic/locked evidence。
+
+## 11. 阶段 G——任务矩阵与端到端
+
+### 开放原则
+
+- 每个 task 按真实 required capabilities 和 hardware result 开放；
+- unknown declaration fail closed；
+- status 仅在端到端证据后从 `experimental` 变为 `validated`；
+- 未通过保持 `experimental` 或 `unsupported`；
+- UI 显示缺失 capability/限制，不运行到中途才失败。
+
+### 首批目标
+
+1. 一个 `MAC_BASIC` 菜单/领取/强化/合成任务端到端；
+2. Auto Pick 等主要依赖 key tap、并可能需要 scroll 的简单 trigger；
+3. 若 locked inputs 通过，一个代表性 `MAC_LOCKED_GAMEPLAY` 流程；
+4. 之后扩展 domain/combat/movement；
+5. 只有 relative hardware pass 后才开放 `MAC_FULL_CAMERA` 路线。
+
+### 视觉验证
+
+使用 normalized Mac frames 验证：
+
+- login/entry；
+- overworld HUD/team；
+- skill/liberation/echo readiness；
+- F interaction；
+- guidebook/map/teleport；
+- stamina/claim/confirm；
+- backpack/echo enhancement；
+- domain start/result；
+- combat target/lock。
+
+修复优先级：content geometry → normalization → threshold/color/gamma/OCR params。只有可重复平台差异且通用修复伤害 Windows 时，才增加 `assets/macos`。
+
+## 12. 阶段 H——CI、内部打包和最终验收
+
+### CI
+
+- macOS arm64/Python 3.12 dependency/install/import/unit job；
+- Windows regression job；
+- provider/target/capture/geometry/input/capability/task-gate tests；
+- CI 不要求游戏或弹权限提示。
+
+### 内部 `.app`
+
+稳定 bundle identifier，安装到 `/Applications`，验证：
+
+- arm64 native libraries；
+- Qt platform plugin；
+- OpenCV/OCR/inference/PyObjC；
+- assets/i18n；
+- Screen Recording / Accessibility；
+- restart/rebuild permission persistence；
+- revoke behavior；
+- shutdown release/stream close。
+
+### 最终 MVP Gate
+
+基础 MVP 至少要求：
+
+- correct window binding；
+- 1920×1080 content frame；
+- OCR/template basics；
+- key tap/hold/release；
+- left/right/middle + absolute click；
+- focus loss no input leak；
+- one `MAC_BASIC` task end-to-end；
+- Windows tests green；
+- stable-identity `.app` permission validation；
+- accurate supported/experimental/unsupported matrix；
+- docs and rollback complete。
+
+`MAC_LOCKED_GAMEPLAY` 和 `MAC_FULL_CAMERA` 是附加声明门槛，不再反向阻断已通过的基础 MVP。
+
+### 公开分发
+
+公开产物另要求：Developer ID Application、Hardened Runtime、timestamp、notarization、staple 和 clean-user Gatekeeper test。ad-hoc signing 不算该证据。
+
+## 13. 主要风险
+
+### focus/release race
+
+最高安全风险。普通 event、invalidation 和 release 必须共享线程安全 gate；任何安全回归立即降级并 fail closed。
+
+### frame/content geometry
+
+不要把 outer frame、logical points 和 stream pixels 混用。所有输入绑定 current generation。
+
+### TCC identity
+
+尽早建立 stable internal `.app`，避免在开发完成后才发现 Terminal permission 与 packaged identity 不一致。
+
+### current Qt/macOS native tests
+
+部分 `qframelesswindow` 测试在 headless/offscreen macOS 可能 segfault，应明确分离需要 native WindowServer 的 UI 测试，而不是降低 runtime safety。
+
+### relative camera
+
+是 `MAC_FULL_CAMERA` 的功能风险，不是基础 MVP 全局风险。先完成实际 held-key/middle/button combinations。
+
+### Windows regression
+
+平台拆分不能破坏 WGC、BitBlt、PostMessage、HWND、ADB/browser 或 persisted config；需要 Windows CI，而 Mac 本地测试不能代替。
+
+## 14. 故障状态建议
 
 ```text
 MAC_SCREEN_CAPTURE_PERMISSION_REQUIRED
@@ -505,56 +594,38 @@ MAC_ACCESSIBILITY_PERMISSION_REQUIRED
 MAC_GAME_NOT_FOUND
 MAC_GAME_WINDOW_NOT_FOUND
 MAC_GAME_NOT_FOREGROUND
+MAC_TARGET_EXITED
 MAC_CAPTURE_STREAM_STOPPED
 MAC_CAPTURE_REBIND_FAILED
 MAC_UNSUPPORTED_GEOMETRY
+MAC_INPUT_GATE_CLOSED
 MAC_INPUT_POST_FAILED
-MAC_CAMERA_INPUT_UNSUPPORTED
+MAC_TASK_CAPABILITY_MISSING
+MAC_TASK_UNSUPPORTED
+MAC_RELATIVE_MOUSE_UNSUPPORTED
 ```
 
-A terminal state must not become an endless task loop.
+terminal state 不得转化为 endless tight loop。
 
-## 8. Capability and evidence protocol
+## 15. 阶段性汇报格式
 
-Track each capability as:
+```text
+已完成
+- ...
 
-1. `not-implemented`
-2. `unit-tested`
-3. `hardware-validated`
-4. `packaged-app-validated`
+已验证
+- 命令：
+- 结果：
 
-Each result records commit SHA, exact command or manual procedure, host/macOS/game details where applicable, resolution/window mode, and outcome. A regression reopens the gate. README, UI, PR and release claims use the lowest demonstrated state.
+仍未验证
+- 需要真实《鸣潮》客户端：
+- 需要打包应用身份：
 
-## 9. Major risks
+风险或阻断
+- ...
 
-### Relative camera input
+下一步
+- ...
+```
 
-Highest functional risk. Validate before task integration; isolate the API so the Quartz technique can change without task changes. Failure limits the product to menu/basic tasks.
-
-### Wider Win32 import graph
-
-Use full application/task import smoke tests and repository searches for `win32`, `windll`, `WinDLL`, `winreg`, Windows overlays and notifications.
-
-### Retina coordinate mismatch
-
-Use one frame-pixel model, immutable geometry snapshots, conversion tests, and diagnostics showing source and posted coordinates.
-
-### Permission identity mismatch
-
-Package with a stable bundle ID before declaring the hardware matrix complete. Terminal/Python permission is not final evidence.
-
-### Window identity changes
-
-Match application/process plus window properties, support rebind, and avoid title-only or stale-ID matching.
-
-### CPU inference performance
-
-Establish correctness first, profile actual task frequency/ROI, then optimize based on measurements.
-
-## 10. Definition of success
-
-A successful first native Mac port means:
-
-> On Apple Silicon running macOS 13+, the user launches the official Wuthering Waves Mac client and OK-WW, grants supported permissions, selects the game, runs an OK-WW task through ScreenCaptureKit and Quartz while the game remains frontmost, and sees automation stop safely if the user leaves the game or another required state fails.
-
-It does not mean the game can run minimized or while the user actively operates another application.
+无法在当前环境执行的硬件或 packaged-app 项目必须明确写“待真机验收”，不得写成“已支持”。

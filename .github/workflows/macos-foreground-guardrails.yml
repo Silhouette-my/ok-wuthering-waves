@@ -1,0 +1,100 @@
+name: macOS Foreground Branch Guardrails
+
+on:
+  push:
+    branches:
+      - feature/macos-foreground-mvp
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-foreground-okww-${{ github.ref }}-${{ matrix.os }}
+  cancel-in-progress: true
+
+jobs:
+  no-game-contracts:
+    name: No-game contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+        python-version:
+          - "3.12"
+
+    env:
+      PYTHONIOENCODING: UTF-8
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out OK-WW integration branch
+        uses: actions/checkout@v4
+        with:
+          path: ok-wuthering-waves
+          submodules: recursive
+          lfs: true
+          persist-credentials: false
+
+      - name: Check out sibling ok-script integration branch
+        uses: actions/checkout@v4
+        with:
+          repository: Silhouette-my/ok-script
+          ref: feature/macos-foreground-mvp
+          path: ok-script
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            ok-script/pyproject.toml
+            ok-wuthering-waves/pyproject.toml
+
+      - name: Install sibling editable projects
+        working-directory: ok-wuthering-waves
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "../ok-script[default,ocr,qt,dev]" opencv-python pytest-subtests
+          python -m pip install -e ".[dev]"
+          python -m pip check
+
+      - name: Run platform and task capability contracts
+        working-directory: ok-wuthering-waves
+        shell: bash
+        run: |
+          python -m pytest -q \
+            tests/test_macos_capabilities.py \
+            tests/test_macos_imports.py \
+            tests/TestMouseResetTask.py \
+            tests/TestConfig.py
+
+      - name: Run legacy application tests in isolated processes
+        working-directory: ok-wuthering-waves
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          failures = []
+          for path in sorted(Path("tests").glob("Test*.py")):
+              print(f"Running {path}", flush=True)
+              result = subprocess.run(
+                  [sys.executable, "-m", "unittest", str(path)],
+                  check=False,
+              )
+              if result.returncode:
+                  failures.append((str(path), result.returncode))
+          if failures:
+              raise SystemExit(f"Legacy test failures: {failures}")
+          PY

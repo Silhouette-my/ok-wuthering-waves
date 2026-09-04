@@ -80,7 +80,10 @@ jobs:
             Remove-Item "Env:\$_" -ErrorAction SilentlyContinue
           }
 
-          Get-ChildItem -Path ".\tests\*.py" | ForEach-Object {
+          # Legacy application tests use unittest-style Test*.py files.
+          # Pytest-style platform contract tests run in the dedicated
+          # macOS foreground guardrail workflow with the sibling ok-script branch.
+          Get-ChildItem -Path ".\tests\Test*.py" | ForEach-Object {
               Write-Host "Running tests in $($_.FullName)"
               try {
                   # Run the Python unittest command

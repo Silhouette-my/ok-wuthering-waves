@@ -1,109 +1,196 @@
-# OK-WW macOS Foreground MVP — Capability Matrix
+# OK-WW macOS 前台模式——能力与任务兼容矩阵
 
-Recorded: 2026-09-04
+记录日期：2026-09-04
 
-Scope baseline: after Stage 1 inventory, before runtime implementation
+适用分支：`feature/macos-foreground-mvp`
 
-## Status vocabulary
+状态：阶段 A 方向调整完成，阶段 B 本地无游戏测试通过；Windows runner、真实《鸣潮》和 packaged `.app` 仍待验收。
 
-Only these states are used for macOS runtime capabilities:
+## 1. 两个独立状态轴
 
-1. `not-implemented`
-2. `unit-tested`
-3. `hardware-validated`
-4. `packaged-app-validated`
+### 1.1 provider capability evidence
 
-A capability advances only when its own evidence passes at the referenced commit. A later regression, relevant upstream sync, dependency change, capture/input architecture change, or packaged-identity change reopens the affected gate.
+仅使用：
 
-Stage 0/1 documentation and repository setup are complete, but they do not advance any runtime capability above `not-implemented`.
+1. `not-implemented`：没有可执行实现，或实现尚未满足最低单元契约；
+2. `unit-tested`：无游戏环境中的确定性接口/状态/导入测试通过；
+3. `hardware-validated`：在官方《鸣潮》Mac 客户端和真实硬件上通过；
+4. `packaged-app-validated`：在稳定 bundle identifier 的内部 `.app` 身份下通过。
 
-## Framework and installation
+单元测试不能替代真实窗口、TCC 或游戏输入证据。相关架构、依赖、系统或 packaged identity 变化会重新打开 gate。
 
-| ID | Capability | Owner | Current state | Next required evidence |
+### 1.2 task support status
+
+- `validated`：该任务在相应能力等级下真机端到端通过；
+- `experimental`：可以在底层 capability 满足后进行真机验收，但不得对用户描述为稳定支持；
+- `unsupported`：不可在当前 Mac MVP 执行。
+
+任务状态不等于 provider evidence。当前没有任务达到 `validated`。
+
+## 2. 精确设备能力
+
+`ok-script` 的 `DeviceCapabilities` 包含：
+
+```text
+keyboard_tap
+keyboard_hold
+absolute_mouse
+mouse_left
+mouse_right
+mouse_middle
+mouse_button_hold
+scroll
+relative_mouse
+foreground_only
+```
+
+所有字段默认 `False`。任务在 enable 前和真正执行前检查要求；未实现后端或空方法不会自动形成能力。
+
+`relative_mouse` 专指自由镜头相对/delta 输入，不等于任务层把百分比坐标换算为绝对坐标的 `move_relative` helper。
+
+## 3. 任务能力等级
+
+| 等级 | 定义 | relative mouse 是否必需 |
+|---|---|---|
+| `MAC_BASIC` | 菜单、登录、领取、合成、背包、强化、固定页面 OCR/模板、绝对点击 | 否 |
+| `MAC_LOCKED_GAMEPLAY` | 持续 W/A/S/D、中键锁敌/居中、左右键保持、键鼠组合和视觉方向选择 | 否 |
+| `MAC_FULL_CAMERA` | 任意 relative X/Y、连续 delta、精确路线转向和自由镜头寻路 | 是 |
+
+relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任务，不阻止已通过的 basic/locked task。
+
+## 4. 框架安装与导入
+
+| ID | 能力 | Owner | 当前证据 | 已有证据 | 下一门槛 |
+|---|---|---|---|---|---|
+| CAP-01 | arm64 macOS 正常 dependency resolution，不选择 Windows-only distribution | `ok-script` | `unit-tested` | sibling editable install 和 `pip check` 在参考 Mac 环境成功；metadata marker tests 通过 | Windows/macOS CI 重跑及最终 immutable dependency |
+| CAP-02 | 确定性 PEP 517/editable build | `ok-script` | `unit-tested` | 普通 build/editable 不再依赖未声明 import 或默认 PyPI 版本查询；package metadata tests 通过 | clean CI build 和最终 release version 流程 |
+| CAP-03 | 从安装环境 `import ok` | `ok-script` | `unit-tested` | 从临时工作目录导入测试通过 | macOS CI |
+| CAP-04 | `DeviceManager` / executor / shared capture/interaction 导入不加载 Win32 | `ok-script` | `unit-tested` | `tests/test_platform_imports.py` 与完整 framework suite 通过 | macOS CI |
+| CAP-05 | Qt app/start/debug/notification optional modules 在 Darwin 可导入 | `ok-script` | `unit-tested` | headless/offscreen import contracts 通过 | native WindowServer UI smoke 与 packaged app |
+| CAP-06 | 所有登记 OK-WW entry/task/scene/custom tab 在 Darwin 可导入 | both | `unit-tested` | `tests/test_macos_imports.py` 通过，无 forbidden module | macOS CI |
+| CAP-07 | Windows provider 行为在平台拆分后保持 | `ok-script` | `not-implemented` | Mac 上的纯逻辑/模拟回归通过，但不能代替 Windows runner | `windows-latest` branch guardrail 绿色 |
+| CAP-08 | `DeviceCapabilities` 默认 fail-closed、matching 和 task preflight | `ok-script` | `unit-tested` | `tests/test_device_capabilities.py` 通过；enable/execute 前检查 | 在真实 Mac provider 接入后重跑 |
+| CAP-09 | 所有登记 OK-WW task 有明确 Mac declaration | OK-WW | `unit-tested` | `tests/test_macos_capabilities.py` 检查 17/17 覆盖 | 真实 capability 与 task end-to-end |
+
+## 5. Desktop target、窗口与权限
+
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-10 | 平台中立 `DesktopWindowTarget` contract | `not-implemented` | 阶段 C fake target/contract tests |
+| CAP-11 | 现有 HWND 行为通过 Windows adapter | `not-implemented` | Windows unit/CI regression |
+| CAP-12 | 枚举官方 Mac app/window candidates | `not-implemented` | 真实客户端 discovery record |
+| CAP-13 | PID/bundle/window binding、manual selection 与 refresh/rebind | `not-implemented` | fake adapter tests + process/window recreation hardware test |
+| CAP-14 | 观察系统 frontmost 状态 | `not-implemented` | fake adapter + Command-Tab hardware observation |
+| CAP-15 | request activation 后确认 observed activation | `not-implemented` | real-game hardware validation；API return 不足 |
+| CAP-16 | Screen Recording permission status/request/revoke | `not-implemented` | source identity unit/hardware + stable `.app` TCC |
+| CAP-17 | Accessibility permission status/request/revoke | `not-implemented` | source identity unit/hardware + stable `.app` TCC |
+| CAP-18 | 稳定 bundle identifier 的早期内部 `.app` identity checkpoint | `not-implemented` | 阶段 C 后从 `/Applications` 验证 permission persistence |
+
+## 6. Capture 与 geometry
+
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-20 | selected-window persistent `SCStream` | `not-implemented` | 阶段 D implementation + lifecycle tests |
+| CAP-21 | BGR `uint8` `(height,width,3)` frame | `not-implemented` | synthetic BGRA/stride tests，再做 hardware frame |
+| CAP-22 | content-only frame，无 cursor/title/border/shadow | `not-implemented` | official-client screenshot inspection |
+| CAP-23 | bounded latest-frame publication 与 ownership | `not-implemented` | concurrency/ownership/overwrite tests |
+| CAP-24 | stream/window recreation 与 bounded rebind | `not-implemented` | failure/rebind tests + hardware |
+| CAP-25 | immutable geometry generation 与 stale-frame rejection | `not-implemented` | generation unit tests |
+| CAP-26 | frame pixel → global logical/CGEvent coordinate | `not-implemented` | scale 1.0/2.0/非整数、offset、crop、resize tests |
+| CAP-27 | 1920×1080 1000+ continuous frames | `not-implemented` | official-client FPS/frame-age/leak/queue evidence |
+| CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `not-implemented` | 阶段 D diagnostics |
+
+## 7. Foreground input 与安全
+
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-30 | Quartz key tap | `not-implemented` | fake event sink + official game |
+| CAP-31 | Quartz key down/up/hold | `not-implemented` | held-state unit + W/A/S/D hardware |
+| CAP-32 | left/right/middle down/up/click | `not-implemented` | unit + game hardware |
+| CAP-33 | absolute mouse coordinate mapping | `not-implemented` | geometry unit + game hardware |
+| CAP-34 | scroll | `not-implemented` | unit + task hardware |
+| CAP-35 | `HeldInputState` keys/buttons/owner/invalidation | `not-implemented` | deterministic state/concurrency tests |
+| CAP-36 | idempotent best-effort `release_all()` | `not-implemented` | release failure、vanished target、repeat tests |
+| CAP-37 | `ForegroundGuard` immediately before ordinary event/batch | `not-implemented` | focus-race tests + Command-Tab hardware |
+| CAP-38 | invalidation 后无 ordinary event，只允许 matching release | `not-implemented` | concurrent gate tests + hardware leak test |
+| CAP-39 | task/capture/permission/device/app shutdown release ordering | `not-implemented` | lifecycle tests + packaged app |
+| CAP-40 | platform-neutral CursorService seam | `unit-tested` | unavailable/Windows seam tests 已通过；Mac Quartz implementation 未完成 | 阶段 E Mac implementation + hardware |
+| CAP-41 | relative/delta mouse X/Y | `not-implemented` | 阶段 F 第三优先级 hardware；只阻止 full-camera claims |
+| CAP-42 | W/A/S/D + left/skill/middle/right-hold combinations | `not-implemented` | 阶段 F official-game matrix；通过后可开放 locked tasks |
+
+## 8. OK-WW integration 与 recognition
+
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-50 | 真实 Mac game matching config | `not-implemented` | 阶段 C 实测 bundle/app/window hints |
+| CAP-51 | Mac logical key set / game hotkeys | `not-implemented` | Quartz map unit + official-client key validation |
+| CAP-52 | `CombatCheck` 不直接调用 Win32，使用 framework cursor seam | `unit-tested` | import/unit tests 通过；Mac CursorService 未实现 | 阶段 E/F hardware |
+| CAP-53 | `MouseResetTask` Mac P0 显式 unsupported | `unit-tested` | capability declaration/preflight test | UI 文案和 packaged behavior |
+| CAP-54 | task 不依赖具体 `PostMessageInteraction` 类型 | `unit-tested` | existing task regression/import tests | Windows CI |
+| CAP-55 | cross-platform screenshot-folder open/reveal | `not-implemented` | platform service + task tests |
+| CAP-56 | CPU OCR/inference arm64，NPU disabled/ignored | `not-implemented` | model load/correctness/performance tests |
+| CAP-57 | existing template/OCR on normalized Mac frame | `not-implemented` | offline real-frame suite |
+| CAP-58 | UI 显示 task status / missing capabilities，并阻止新 enable | `unit-tested` | framework `TaskCard` status-code badge tests 通过；Windows compatible task 不显示额外 badge | 阶段 G 补 level/本地化说明并做真实 provider UI 验收 |
+
+## 9. Task compatibility
+
+下表是当前代码审计后的**候选验收范围**，不是用户支持声明。
+
+| Task | Level | Required capability 摘要 | 当前状态 | 下一证据 |
 |---|---|---|---|---|
-| CAP-01 | Normal arm64 macOS dependency resolution | `ok-script` | `not-implemented` | Stage 2 install succeeds without selecting Windows-only distributions. |
-| CAP-02 | Deterministic PEP 517/editable framework build | `ok-script` | `not-implemented` | Stage 2 editable metadata/build succeeds without undeclared build imports or network-derived version state. |
-| CAP-03 | `import ok` from installed environment | `ok-script` | `not-implemented` | Stage 2 clean-environment import test. |
-| CAP-04 | `DeviceManager` and core executor import without Win32 | `ok-script` | `not-implemented` | Stage 2 import-isolation test and `sys.modules` assertion. |
-| CAP-05 | Qt application/start modules import on Darwin | `ok-script` | `not-implemented` | Stage 2 headless/offscreen import test without Win32 global-hotkey modules. |
-| CAP-06 | All registered OK-WW modules import on Darwin | both | `not-implemented` | Stage 2 framework gate plus Stage 6 removal of game-level OS imports. |
-| CAP-07 | Windows provider behavior preserved after platform split | `ok-script` | `not-implemented` | Stage 2 Windows import/unit/CI regression results for changed paths. |
+| `MergeEchoTask` | `MAC_BASIC` | key tap、absolute mouse、left、foreground-only | `experimental` | normalized frame + end-to-end |
+| `EnhanceEchoTask` | `MAC_BASIC` | key tap、absolute mouse、left、foreground-only | `experimental` | end-to-end |
+| `ChangeEchoTask` | `MAC_BASIC` | key tap、absolute mouse、left、foreground-only | `experimental` | end-to-end |
+| `AutoLoginTask` | `MAC_BASIC` | absolute mouse、left、foreground-only | `experimental` | login/notice hardware |
+| `AutoPickTask` | `MAC_BASIC` | key tap、scroll、foreground-only | `experimental` | F-key/候选滚动 trigger hardware |
+| `AutoDialogTask` | `MAC_BASIC` | absolute mouse、left、foreground-only | `experimental` | dialog hardware |
+| `FastTravelTask` | `MAC_BASIC` | absolute mouse、left、foreground-only | `experimental` | fast-travel hardware |
+| `AutoCombatTask` | `MAC_LOCKED_GAMEPLAY` | key tap/hold、absolute、left/middle、button hold、foreground-only | `experimental` | locked input matrix + representative combat |
+| `FarmEchoTask` | `MAC_LOCKED_GAMEPLAY` | locked baseline + right + scroll | `experimental` | movement/combat/pickup end-to-end |
+| `NightmareNestTask` | `MAC_LOCKED_GAMEPLAY` | locked baseline + scroll | `experimental` | end-to-end |
+| `TacetTask` | `MAC_LOCKED_GAMEPLAY` | locked baseline + scroll | `experimental` | end-to-end |
+| `ForgeryTask` | `MAC_LOCKED_GAMEPLAY` | locked baseline + scroll | `experimental` | end-to-end |
+| `SimulationTask` | `MAC_LOCKED_GAMEPLAY` | locked baseline + scroll | `experimental` | end-to-end |
+| `DailyTask` | `MAC_LOCKED_GAMEPLAY` | 编排子任务，按最宽依赖 | `experimental` | constituent tasks + end-to-end |
+| `MultiAccountDailyTask` | `MAC_LOCKED_GAMEPLAY` | 编排 DailyTask，按最宽依赖 | `experimental` | account flow + end-to-end |
+| `GardenTask` | `MAC_LOCKED_GAMEPLAY` | key tap/hold、absolute、left、foreground-only | `experimental` | end-to-end |
+| `MouseResetTask` | — | Windows workaround | `unsupported` | 只有真机证明确有必要才重新设计 |
 
-## Desktop target and permissions
+当前没有登记任务要求 `MAC_FULL_CAMERA` 或 `relative_mouse=True`。未来任务如调用自由镜头 delta，必须显式升级 requirement，并在 CAP-41 硬件通过前被拒绝。
 
-| ID | Capability | Owner | Current state | Next required evidence |
-|---|---|---|---|---|
-| CAP-10 | Platform-neutral desktop target contract | `ok-script` | `not-implemented` | Stage 3 contract tests with fake targets and Windows adapter. |
-| CAP-11 | Existing HWND behavior through Windows adapter | `ok-script` | `not-implemented` | Stage 3 Windows regression tests. |
-| CAP-12 | Enumerate official Mac application/window candidates | `ok-script` + OK-WW hints | `not-implemented` | Stage 3 real-hardware discovery record. |
-| CAP-13 | Stable PID/application/window binding and refresh | `ok-script` | `not-implemented` | Stage 3 unit tests and process/window-recreation hardware test. |
-| CAP-14 | Observe frontmost state | `ok-script` | `not-implemented` | Stage 3 fake-adapter tests and Command-Tab hardware observation. |
-| CAP-15 | Request activation and verify observed activation | `ok-script` | `not-implemented` | Stage 3 hardware validation; API return alone is insufficient. |
-| CAP-16 | Screen-capture permission status/request service | `ok-script` | `not-implemented` | Stage 3/4 unit states and hardware permission test. |
-| CAP-17 | Accessibility permission status/request service | `ok-script` | `not-implemented` | Stage 3/5 unit states and hardware permission test. |
+## 10. 端到端与发布声明
 
-## Capture and geometry
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-60 | 一个 `MAC_BASIC` task end-to-end | `not-implemented` | 阶段 G real game |
+| CAP-61 | Auto Pick 或其他 key-tap trigger end-to-end | `not-implemented` | CAP-30/37 后 hardware |
+| CAP-62 | 一个 `MAC_LOCKED_GAMEPLAY` representative flow | `not-implemented` | CAP-31/32/36/37/42 hardware |
+| CAP-63 | `MAC_FULL_CAMERA` route flow | `not-implemented` | CAP-41 hardware + route end-to-end |
+| CAP-64 | 当前全部 task 兼容矩阵与 UI 一致 | `not-implemented` | 阶段 G automated + hardware evidence |
 
-| ID | Capability | Owner | Current state | Next required evidence |
-|---|---|---|---|---|
-| CAP-20 | Persistent selected-window ScreenCaptureKit `SCStream` | `ok-script` | `not-implemented` | Stage 4 implementation and unit contracts. |
-| CAP-21 | BGR `uint8` `(height, width, 3)` frame output | `ok-script` | `not-implemented` | Synthetic buffer/stride tests, then real-window frame evidence. |
-| CAP-22 | Content-only frame without cursor/title/border/shadow | `ok-script` | `not-implemented` | Stage 4 real-hardware screenshots and inspection. |
-| CAP-23 | Bounded latest-frame publication and ownership | `ok-script` | `not-implemented` | Stage 4 concurrency/ownership/queue tests. |
-| CAP-24 | Capture/window recreation and bounded rebind | `ok-script` | `not-implemented` | Stage 4 failure/rebind unit tests and hardware result. |
-| CAP-25 | Geometry generation and stale-frame rejection | `ok-script` | `not-implemented` | Stage 3/4 unit tests. |
-| CAP-26 | Frame-pixel to global coordinate conversion | `ok-script` | `not-implemented` | Scale 1.0, 2.0, non-integer/observed scale and origin tests; hardware click mapping later. |
-| CAP-27 | Stable 1920×1080 continuous capture | `ok-script` | `not-implemented` | At least 1000 frames, FPS/frame-age and leak/queue observations on the official client. |
+CAP-41 未通过时不阻止 CAP-60，也不阻止已经通过的 CAP-62；但 CAP-63 与 full-camera/complete-route claims 保持关闭。
 
-## Foreground input and safety
+## 11. CI、packaging 与公开发布
 
-| ID | Capability | Owner | Current state | Next required evidence |
-|---|---|---|---|---|
-| CAP-30 | Quartz key tap/down/up | `ok-script` | `not-implemented` | Stage 5 fake event-sink tests, then official-game hardware validation. |
-| CAP-31 | Left/right/middle mouse down/up/click | `ok-script` | `not-implemented` | Stage 5 unit and hardware tests. |
-| CAP-32 | Absolute movement/click coordinate mapping | `ok-script` | `not-implemented` | Geometry unit tests and official-game hardware validation. |
-| CAP-33 | Relative/delta camera X/Y | `ok-script` | `not-implemented` | Stage 5 hardware validation; blocks combat/route claims. |
-| CAP-34 | Held-key/button state tracking | `ok-script` | `not-implemented` | Stage 5 deterministic state tests. |
-| CAP-35 | Idempotent best-effort `release_all()` | `ok-script` | `not-implemented` | Stage 5 tests including individual release failure and vanished target. |
-| CAP-36 | Foreground guard immediately before events | `ok-script` | `not-implemented` | Stage 5 focus-race tests and hardware focus-loss test. |
-| CAP-37 | No ordinary input after invalidation | `ok-script` | `not-implemented` | Stage 5 concurrent event-gate tests. |
-| CAP-38 | Safe shutdown/target-loss/capture-loss/permission-loss release | `ok-script` | `not-implemented` | Stage 5 lifecycle tests, then hardware/package validation. |
-| CAP-39 | Platform-neutral cursor service | `ok-script` | `not-implemented` | Stage 5 Windows/Mac service tests; consumed by OK-WW in Stage 6. |
+| ID | 能力 | 当前证据 | 下一门槛 |
+|---|---|---|---|
+| CAP-70 | macOS Python 3.12 no-game branch CI | `not-implemented` | 新 workflow 在远端绿色 |
+| CAP-71 | Windows branch regression CI | `not-implemented` | `windows-latest` 绿色 |
+| CAP-72 | stable bundle-ID arm64 internal `.app` launch | `not-implemented` | 阶段 C/H internal package |
+| CAP-73 | packaged Screen Recording permission/persistence/revoke | `not-implemented` | `/Applications` identity validation |
+| CAP-74 | packaged Accessibility/input/focus safety | `not-implemented` | stable identity hardware |
+| CAP-75 | packaged shutdown releases input/capture | `not-implemented` | lifecycle hardware |
+| CAP-76 | Developer ID + Hardened Runtime + timestamp + notarization + staple | `not-implemented` | public-release gate；凭据不入库 |
 
-## OK-WW integration and recognition
+## 12. 当前声明边界
 
-| ID | Capability | Owner | Current state | Next required evidence |
-|---|---|---|---|---|
-| CAP-40 | Verified Mac game matching configuration | OK-WW | `not-implemented` | Stage 3 observations followed by Stage 6 config integration. |
-| CAP-41 | Mac-safe game hotkey mapping | OK-WW | `not-implemented` | Stage 6 official-client key validation. |
-| CAP-42 | `CombatCheck` uses framework cursor/geometry services | OK-WW | `not-implemented` | Stage 6 tests after CAP-39. |
-| CAP-43 | `MouseResetTask` explicit Mac behavior | OK-WW | `not-implemented` | Stage 6 explicit disablement or framework-service implementation and tests. |
-| CAP-44 | Concrete PostMessage type checks removed from task behavior | OK-WW | `not-implemented` | Stage 6 activation-capability tests. |
-| CAP-45 | Cross-platform screenshot-folder open/reveal | both | `not-implemented` | Framework service plus Stage 6 task tests. |
-| CAP-46 | CPU OCR/inference loads on arm64 | OK-WW | `not-implemented` | Stage 6 model/runtime import and correctness tests with NPU disabled. |
-| CAP-47 | Existing templates/OCR work on normalized Mac frames | OK-WW | `not-implemented` | Stage 6 offline visual suite and real-frame evidence. |
-| CAP-48 | Simple non-combat task end-to-end | OK-WW | `not-implemented` | Stage 6 official-client hardware run. |
-| CAP-49 | Representative combat flow end-to-end | OK-WW | `not-implemented` | CAP-33 hardware validation plus Stage 6 combat run. |
-| CAP-50 | Route/map flow end-to-end | OK-WW | `not-implemented` | CAP-33 and navigation hardware validation. |
+截至本记录：
 
-## CI, packaging, and release
-
-| ID | Capability | Owner | Current state | Next required evidence |
-|---|---|---|---|---|
-| CAP-60 | Game-independent macOS Python 3.12 CI | both | `not-implemented` | Stage 7 green dependency/import/unit jobs. |
-| CAP-61 | Windows CI remains green for affected paths | both | `not-implemented` | Stage 2 onward, recorded on every platform-layer change. |
-| CAP-62 | Internal arm64 `.app` launches without shell | OK-WW | `not-implemented` | Stage 7 packaged build validation. |
-| CAP-63 | Packaged Screen Recording permission | both | `not-implemented` | Stable bundle-ID `.app` permission grant/revoke validation. |
-| CAP-64 | Packaged Accessibility permission and input | both | `not-implemented` | Stable bundle-ID `.app` permission and focus-safety validation. |
-| CAP-65 | Packaged shutdown releases input/capture | both | `not-implemented` | Stage 7 packaged lifecycle validation. |
-| CAP-66 | Developer ID, Hardened Runtime, notarization, staple | release | `not-implemented` | Public-release gate after MVP acceptance; credentials never enter the repository. |
-
-## Claim boundary
-
-As of this record:
-
-- no Mac runtime capability may be described as supported;
-- no menu, task, combat, route, background, packaged, or permission capability is implemented;
-- Stage 0 and Stage 1 establish only a controlled workspace, normative constraints, inventory, decision process, and rollback process;
-- combat and route claims remain blocked until CAP-33 is at least `hardware-validated`;
-- public distribution remains blocked until the relevant core capabilities are `packaged-app-validated` and CAP-66 passes.
+- 可声明“平台安全安装/导入和 capability/task declaration 已在本地无游戏环境通过单元测试”；
+- 不可声明已经发现或捕获官方游戏窗口；
+- 不可声明 ScreenCaptureKit、Quartz、权限或 packaged app 已实现；
+- 不可声明中键、持续按键、locked gameplay 或 relative mouse 在游戏中有效；
+- 所有候选任务仍为 `experimental`，`MouseResetTask` 为 `unsupported`；
+- 不支持后台；
+- Windows 行为仍需远端 Windows runner 证明；
+- README、UI、PR 和 release note 必须采用上述较低状态。

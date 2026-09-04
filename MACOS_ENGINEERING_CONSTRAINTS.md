@@ -1,228 +1,358 @@
 # OK-WW macOS 前台模式移植——工程约束
 
-状态：**macOS 前台模式 MVP 的规范性约束**
+状态：**macOS 前台模式 MVP 的规范性产品与工程合同**
 
-目标：Apple Silicon、macOS 13+、Python 3.12 arm64、官方《鸣潮》Mac 客户端
+目标基线：Apple Silicon arm64、macOS 13+、Python 3.12 arm64、官方《鸣潮》Mac 客户端、前台模式、1920×1080 首个硬件验收、CPU OCR/推理
 
-本文档规定 OK-WW 首个原生 macOS 版本的硬性工程边界。文中的“必须”“不得”“仅允许”“发布阻断项”均为强制要求，不得通过兼容垫片、隐藏回退、空实现或宽泛异常处理绕过。
+本文规定首个原生 macOS 版本的硬性边界。文中的“必须”“不得”“仅允许”和“发布门槛”均为强制要求，不得通过兼容垫片、隐藏回退、空实现、降低安全检查或夸大证据绕过。
 
 ## 0. 规范层级与变更控制
 
-- 本文件是 macOS 前台 MVP 的规范性产品与工程合同。
+- 本文件是 OK-WW macOS 前台 MVP 的最高仓库内规范。
 - `docs/development/macos-foreground-port-plan.md` 只描述实施顺序和证据，不得削弱本文件。
-- 仓库 `AGENTS.md`、嵌套说明和适用 skills 同时生效；更具体规则可以收紧实现，但不得放宽“仅前台、仅公开 API、失败关闭、Windows 不回归”四项核心边界。
-- 发现规则冲突时，必须在修改运行时代码前解决。安全、仓库职责和兼容性优先于实现便利。
-- 有意偏离必须在 `docs/development/decisions/` 提交 ADR，至少记录原因、备选方案、安全/权限影响、Windows 影响、测试与硬件验收、迁移及回滚。
-- 代码注释、临时 issue、聊天记录或 PR 讨论不能代替 ADR。
+- `AGENTS.md`、嵌套说明和适用 skills 同时生效；更具体规则可收紧实现，但不得放宽“仅前台、仅公开 API、失败关闭、Windows 不回归”。
+- 发现冲突时，必须在修改运行时代码前解决；安全、仓库职责和兼容性优先于实现便利。
+- 有意偏离前台语义、公开 API、仓库职责、持久截图、坐标模型、能力门控、输入安全或 Windows 回归边界时，必须先在 `docs/development/decisions/` 提交 ADR。
+- 代码注释、聊天、临时 issue 或 PR 讨论不能代替 ADR。
 
-## 1. 开发与集成模型
+## 1. 长期分支与交付模型
 
-### 1.1 长期集成分支
+### 1.1 开发分支
 
-- `ok-script` 与 `ok-wuthering-waves` 均使用 `feature/macos-foreground-mvp` 或明确对应的长期集成分支。
-- 分支从记录的 `upstream/master` SHA 创建。
+- `ok-script` 与 `ok-wuthering-waves` 都使用 `feature/macos-foreground-mvp` 长期集成分支。
+- 分支从已记录的 `upstream/master` SHA 创建。
 - `origin` 指向 contributor fork；`upstream` 指向 `ok-oldking` canonical repository。
-- 开发提交按逻辑拆分、可审查、可回滚、可二分，尽量保持可构建。
-- 不得为每个阶段创建准备合并的基础设施 PR、占位 PR 或未完成能力 PR。
-- 不得把不完整 Mac 支持合入默认分支来“解锁后续工作”。
-- 定期同步 upstream，及早暴露冲突。
-- 开发分支只推送到 contributor fork；不得直接推送或强制更新 canonical 默认分支。
+- 开发提交保持逻辑清晰、可审查、可回滚、可二分，尽量在提交边界可构建。
+- 不得为每一阶段创建准备合并的基础设施 PR、占位 PR 或未完成能力 PR。
+- 不得把不完整 Mac 支持合入默认分支来解锁后续工作。
+- 定期同步 upstream，并按已提交的同步/回滚流程处理冲突。
 
-### 1.2 跨仓库依赖
+### 1.2 跨仓库连接
 
 开发期使用 sibling editable install：
 
 ```bash
-./.venv/bin/python -m pip install -e "../ok-script[ocr,qt]"
+./.venv/bin/python -m pip install -e "../ok-script[ocr,qt,dev]"
 ./.venv/bin/python -m pip install -e ".[dev]"
 ```
 
-不得用 submodule、subtree、复制包或 vendoring 连接两个仓库。
+不得通过 submodule、subtree、复制包、vendoring、可变分支 URL 或临时发布包连接两个仓库。
 
-最终 OK-WW 变更不得依赖：
+最终交付是两个协调的完整 MVP PR：
 
-- 可变分支 URL；
-- 临时或未发布本地 wheel；
-- 未提交补丁或文件；
-- 开发者私有目录结构；
-- 未记录的环境级 monkey patch。
-
-最终交付是两个相互关联的完整 MVP PR：
-
-1. `ok-script` PR：可复用的平台能力；
+1. `ok-script` PR：可复用平台能力；
 2. `ok-wuthering-waves` PR：游戏集成，并使用维护者接受的不可变框架版本或提交。
 
-### 1.3 阶段 0 启动门槛
+最终 OK-WW PR 不得依赖：
 
-阶段 0 只负责工作区、仓库身份、分支、参考环境、规范、忽略规则和基线证据。不得开始窗口发现、ScreenCaptureKit、Quartz 或任务适配运行时代码。
+- mutable branch URL；
+- 未提交文件或私有补丁；
+- 临时 wheel；
+- 开发者绝对路径；
+- 未记录的环境 monkey patch。
 
-运行时代码开始前必须完成并记录：
-
-- 两个可写 contributor fork；
-- 两个独立 sibling checkout；
-- 已验证的 `origin`/`upstream`；
-- 两个集成分支和起始 upstream SHA；
-- Apple Silicon、受支持 macOS、Xcode/Clang、Git、Python 3.12 arm64；
-- OK-WW 本地 `.venv`；
-- 两个实际分支中的约束文件；
-- 初始 install/import/test 命令与结果；
-- `.gitignore` 对本地环境、构建物、凭据、TCC 材料和私密验收材料的覆盖；
-- bootstrap 提交已推送到 contributor fork，但未开阶段性 PR；
-- 提交后两个工作树干净。
-
-初始命令可以因现有 Windows-only 依赖图而失败，但必须原样记录并关联后续阶段。不得用 `--no-deps`、临时 wheel、分支 URL 或全局 Python 环境掩盖失败。
-
-### 1.4 仓库与证据卫生
+### 1.3 仓库与证据卫生
 
 不得提交：
 
-- 本地绝对路径；
-- token、私钥、Developer ID、公证凭据或敏感签名日志；
+- token、私钥、Developer ID、公证凭据或签名证书；
 - TCC 数据库或权限绕过材料；
-- 个人账户截图、未脱敏日志和私密硬件验收数据；
-- `.venv`、`.app`、`.dmg`、`.pkg`、构建缓存或生成目录。
+- 个人账户截图、未脱敏日志或私密硬件证据；
+- `.venv`、`.app`、`.dmg`、`.pkg`、`.xcarchive`、`DerivedData`、构建缓存；
+- 本机绝对路径。
 
-采用外部分支或历史 PR 代码时必须记录来源、作者归属和许可证兼容性，不得整段照搬未经审查的实验实现。
+参考外部项目或历史 PR 时必须记录来源、作者归属和许可证兼容性；不得整段照搬未经审查的实验实现。
 
-## 2. 产品定义与支持基线
+## 2. 产品目标与非目标
 
-首个 Mac 版本是官方《鸣潮》Mac 客户端的**原生前台自动化客户端**。
+最终产品行为：
 
-支持流程：
+```text
+用户启动官方《鸣潮》Mac 客户端
+        ↓
+OK-WW 发现并绑定真实游戏窗口
+        ↓
+持久 ScreenCaptureKit SCStream 连续取帧
+        ↓
+标准化为 BGR uint8 NumPy/OpenCV 图像
+        ↓
+复用现有 OCR、模板、颜色、YOLO 和任务逻辑
+        ↓
+仅在绑定游戏实际为系统前台应用时发送 Quartz 输入
+        ↓
+失焦、任务停止、窗口消失、权限失效或截图致命失败
+        ↓
+立即阻断普通输入、release_all() 并暂停/停止
+```
 
-1. 用户启动官方游戏；
-2. OK-WW 发现或让用户选择游戏应用和窗口；
-3. 使用 ScreenCaptureKit 捕获选定窗口；
-4. 任务开始和每次输入前确认游戏是系统最前台应用；
-5. 使用 Quartz 发送键盘和鼠标；
-6. 焦点、目标、权限、截图或任务状态失效时立即阻断输入并释放保持状态。
-
-必须支持的基线：
+首个正式目标：
 
 - Apple Silicon arm64；
-- macOS 13.0 或更高；
-- Python 3.12 arm64 参考环境；
-- 现有 PySide6/Qt GUI 技术栈；
+- macOS 13+；
+- Python 3.12 arm64；
 - 官方《鸣潮》Mac 客户端；
-- 窗口化或无边框窗口化优先；
-- 现有 16:9 坐标模型；
-- 首个硬件验收分辨率 1920×1080；
-- 初始 CPU 推理。
+- 前台模式；
+- 16:9；
+- 1920×1080 首个硬件验收；
+- CPU OCR/推理；
+- 现有 PySide6/Qt GUI；
+- 不引入 MaaFramework 运行时依赖。
 
 明确不支持：
 
 - Intel Mac 和正式 macOS 12 承诺；
-- 最小化、后台或其他 Mission Control Space 控制；
-- BetterDisplay、虚拟显示器或私有 `CGVirtualDisplay`；
-- `CGEvent.postToPid` 后台机制；
-- 游戏注入、dylib 注入、swizzling、Metal hook 或反作弊绕过；
+- 后台、最小化、被其他应用覆盖时继续自动化；
+- BetterDisplay、虚拟显示器、私有 `CGVirtualDisplay`；
+- `CGEvent.postToPid` 后台控制；
+- 进程/dylib 注入、swizzling、Metal hook 或反作弊绕过；
 - Android 模拟器、云游戏或远程串流替代原生客户端；
 - 任意宽高比；
 - Mac App Store 首发分发。
 
-## 3. API 政策
+## 3. 公开 API 政策
 
-仅允许公开 Apple API：
+仅允许使用公开 Apple API：
 
 - ScreenCaptureKit；
 - AppKit；
 - Core Graphics / Quartz；
-- 必要时的 ApplicationServices Accessibility API；
+- ApplicationServices Accessibility API；
 - Foundation / CoreFoundation。
 
 禁止：
 
 - 私有 WindowServer SPI；
 - 私有 `CGVirtualDisplay*`；
-- 注入、进程内 hook、method swizzling；
+- injection、hook、method swizzling；
 - 直接修改游戏进程代码、数据或运行状态；
-- 任何用于无焦点、隐藏或后台控制的未公开接口；
-- 自动修改 TCC 或以 root 绕过权限。
+- 无焦点、隐藏或后台控制的未公开接口；
+- 自动修改 TCC 或通过 root 绕过权限。
 
-## 4. 仓库职责边界
+## 4. 仓库职责
 
-### 4.1 `ok-script` 负责
+### 4.1 `ok-script` 必须实现
 
-- 平台路由；
-- 平台中立桌面窗口目标；
-- Windows 兼容适配；
-- macOS 应用/窗口发现；
-- ScreenCaptureKit 持久截图；
-- Quartz 前台输入；
-- 前台守卫；
-- 光标服务；
-- 屏幕捕获和辅助功能权限服务；
-- 坐标转换与几何代次；
-- 持续输入状态和关闭生命周期；
-- 平台依赖与延迟导入。
+- 平台安全 dependency marker 和 lazy import；
+- 平台中立 `DesktopWindowTarget`；
+- Windows `HwndWindow` 兼容 adapter；
+- macOS 窗口发现、手动选择、PID/window 重绑；
+- `ScreenCaptureKitCaptureMethod` 持久 `SCStream`；
+- `QuartzForegroundInteraction`；
+- `ForegroundGuard`；
+- `HeldInputState` 与 `release_all()`；
+- `CursorService`；
+- Screen Recording / Accessibility 权限服务；
+- `DeviceCapabilities`；
+- 通用帧/内容区/显示器/输入坐标转换；
+- 平台契约测试、生命周期和可观测错误状态。
 
-### 4.2 `ok-wuthering-waves` 负责
+### 4.2 `ok-wuthering-waves` 必须实现
 
-- 经真实安装验证的游戏 app/window 匹配提示；
-- 游戏热键选择；
-- 任务兼容性和能力声明；
+- 经真实安装观察的《鸣潮》Mac app/window 匹配提示；
+- Mac CPU 推理配置与 NPU 关闭/安全忽略；
+- task/combat/scene 不直接调用 OS API；
+- 任务精确 capability requirement；
+- `MAC_BASIC` / `MAC_LOCKED_GAMEPLAY` / `MAC_FULL_CAMERA` 分级；
+- `validated` / `experimental` / `unsupported` 状态；
+- Mac 任务兼容矩阵；
 - 必要且有证据的 `assets/macos` 覆盖；
-- 移除两处直接 `win32api` 使用并消费框架 CursorService；
-- Mac CPU 推理配置；
-- OK-WW 用户文档、权限指导和故障排查。
+- 用户权限、安装、焦点、安全和限制文档；
+- 真机任务验收记录。
 
-### 4.3 禁止本仓库自建 OS 兼容层
+### 4.3 禁止私建后端或兼容垫片
 
-- 不得新增 `src.compat.win32api` 一类保持 Win32 外形、在 Darwin 内改调 Quartz 的垫片。
-- task、combat、scene 不得直接导入 Win32、AppKit、Quartz、ScreenCaptureKit。
-- 不得复制 `ok-script` 后端到 OK-WW。
-- Windows 专属非核心功能可在 Mac P0 显式禁用，但状态必须可观察、可测试；不得空实现、吞异常或伪造成功。
+- 不得新增 `src.compat.win32api` 一类保持 Win32 外形、在 Darwin 内调用 Quartz 的 shim。
+- task、combat、scene 不得直接导入 AppKit、Quartz、ScreenCaptureKit 或 Win32。
+- 不得把 `ok-script` 后端复制进 OK-WW。
+- Windows-only 非核心功能可以在 Mac P0 明确禁用，但状态必须可观察、可测试；不得空实现、吞异常或伪造成功。
 
-## 5. 依赖与平台导入
+## 5. 平台依赖与导入
 
 `pyproject.toml` 是依赖事实来源。
 
-- `pywin32`、`pydirectinput`、`pycaw`、适用的 `comtypes` 以及仅 Windows 可用的 `mouse` 必须使用环境标记或 Windows extra。
-- macOS 只声明最小 PyObjC wrapper，例如 Cocoa、Quartz、ScreenCaptureKit、ApplicationServices。
-- 生成锁文件必须由生成工具重建；不得手改版本集合。
-- 单一锁无法跨平台复现时，允许独立 macOS arm64 锁。
+- Windows-only 包必须使用环境 marker 或 Windows extra。
+- macOS 只声明实际使用的最小 PyObjC framework wrapper。
+- 生成锁文件通过工具重建，不得手改版本集合。
+- 单一锁无法跨平台复现时，可增加独立 macOS arm64 lock。
 - Windows 生成的 `requirements.txt` 不是 Mac 安装清单。
 
 共享模块顶层不得无条件导入：
 
 - `win32api`、`win32con`、`win32gui`、`win32process`、`winreg`；
-- `ctypes.windll` 或 `ctypes.WinDLL` 实现；
-- AppKit、Quartz、ScreenCaptureKit 或 PyObjC 平台实现。
+- `ctypes.windll` / `ctypes.WinDLL` 实现；
+- AppKit、Quartz、ScreenCaptureKit、ApplicationServices 或 PyObjC 实现。
 
-必须先选择平台/provider，再延迟导入实现。不得散布宽泛 `try/except ImportError` 掩盖错误边界。
+必须先选择平台/provider，再加载具体实现。不得散布宽泛 `try/except ImportError` 掩盖错误边界。
 
-macOS 冒烟测试必须能导入 `ok`、DeviceManager、executor、共享设备抽象和全部 OK-WW task，而不加载 Win32-only 模块。
+macOS import smoke 必须覆盖 `import ok`、`DeviceManager`、executor、应用入口、全部登记 task、scene、custom tab 和 combat module，且不加载 Win32-only backend。
 
-## 6. 桌面窗口目标
+## 6. 设备能力与任务分级
+
+### 6.1 `DeviceCapabilities`
+
+框架至少区分：
+
+```text
+keyboard_tap
+keyboard_hold
+absolute_mouse
+mouse_left
+mouse_right
+mouse_middle
+mouse_button_hold
+scroll
+relative_mouse
+foreground_only
+```
+
+要求：
+
+- 新 provider 默认全部 `False`；
+- 只有真实实现和安全语义存在时才可声明 `True`；
+- inherited empty method、日志 stub 或吞异常不形成能力；
+- 任务在 enable 前和真正执行前再次检查要求；
+- 缺失能力时在任务逻辑开始前 fail closed，不能运行到中途才发现方法为空；
+- `foreground_only=True` 表示每个普通事件或短原子批次前都验证 frontmost；
+- `relative_mouse` 专指自由镜头相对/delta，不等于把百分比坐标换算成绝对点击/移动。
+
+### 6.2 任务等级
+
+#### `MAC_BASIC`
+
+用于菜单、登录、领取、背包、强化、合成、固定页面点击及 OCR/模板流程。典型能力为 key tap、绝对点击、左键和前台安全；每个任务仍按真实使用精确声明。
+
+#### `MAC_LOCKED_GAMEPLAY`
+
+用于：
+
+- 持续 W/A/S/D；
+- 中键锁敌或视角居中；
+- 左右键保持；
+- 键鼠组合；
+- 根据视觉目标选择 W/A/S/D；
+- 不要求任意自由镜头旋转。
+
+#### `MAC_FULL_CAMERA`
+
+用于：
+
+- 任意 relative X/Y；
+- 连续 delta；
+- 精确路线转向；
+- 需要自由镜头的自动寻路。
+
+### 6.3 任务状态与证据状态
+
+任务状态：
+
+- `validated`：对应真机端到端通过；
+- `experimental`：能力满足时允许真机验收，但不得描述为稳定支持；
+- `unsupported`：不可执行。
+
+底层能力证据另行使用：
+
+1. `not-implemented`；
+2. `unit-tested`；
+3. `hardware-validated`；
+4. `packaged-app-validated`。
+
+这两个轴不得混用。单元测试通过不能把任务标为 `validated`。
+
+### 6.4 relative mouse 不是统一 MVP 阻断项
+
+不得再使用“relative mouse 失败则整个 Mac MVP 不得发布”的绝对规则。
+
+- relative mouse 未通过时，允许发布已通过的 `MAC_BASIC` MVP；
+- 允许据实开放已硬件通过的 `MAC_LOCKED_GAMEPLAY` 任务；
+- 要求 `relative_mouse=True` 的任务必须在执行前被拒绝；
+- 不得声明 `MAC_FULL_CAMERA`、完整路线、完整跑图、完整战斗或 Windows 功能对等。
+
+当前注册任务审计未发现自由镜头 delta 调用；`center_camera()` 是中键中心点击。必须先验证实际依赖，而不是为通用 RelativeMove 推迟基础任务。
+
+## 7. 桌面窗口目标与识别
 
 不得把 `HwndWindow` 扩充成仍以 HWND 字段为中心的伪跨平台对象。
 
 平台中立 target 至少表达：
 
-- 当前运行实例中的进程标识；
-- 可选 bundle/application 标识；
-- 平台窗口标识；
-- 标题/显示名；
-- 窗口、内容区和截图几何；
-- 存活和前台状态；
-- 激活请求；
-- 窗口或进程重建后的刷新/重绑。
+- PID 与进程存活；
+- bundle/application identifier；
+- platform window ID；
+- 应用名与窗口标题；
+- outer frame、content geometry、capture geometry；
+- display scale；
+- binding/geometry generation；
+- frontmost 状态；
+- activation request 与观察到的 activation；
+- PID/window 重建后的 refresh/rebind。
 
-Windows 以最小改动适配现有 HWND；macOS 可绑定 `NSRunningApplication`、`SCWindow`、`CGWindowID`。任务不得判断底层标识类型。
+窗口匹配必须组合：
 
-不得在观察真实安装客户端前把猜测 bundle ID 写成唯一条件，也不得只靠标题匹配。多候选时允许显式选择，并持久化稳定提示而不是旧 PID/window ID。
+- 经真实客户端观察的 bundle identifier；
+- PID；
+- `SCWindow.owningApplication`；
+- 标题作为辅助；
+- 尺寸和层级过滤；
+- 用户手动选择兜底。
 
-## 7. ScreenCaptureKit 截图契约
+不得在观察官方客户端前硬编码猜测 bundle identifier，也不得只靠标题。持久化稳定提示，不持久化旧 PID/window ID。
 
-### 7.1 生产路径
+## 8. 权限与稳定应用身份
 
-- 连续自动化必须使用持久化 `SCStream`。
-- 首选 `SCContentFilter(desktopIndependentWindow:)`。
-- `SCScreenshotManager`、主显示器截图和全桌面裁切仅供显式诊断或测试夹具，不得进入 task executor，也不得成为自动回退。
-- `showsCursor = false`。
-- 回调只做必要的帧接收、转换/所有权处理和最新帧发布，不运行 OCR、模板、task 或 Qt 控件更新。
+必须显式处理：
 
-### 7.2 输出
+- Screen Recording / screen capture；
+- Accessibility synthetic control。
+
+使用支持的 preflight/request API。缺失或撤销权限时：
+
+- 显示明确状态和设置路径；
+- 阻止对应 capture/input capability；
+- 不在紧密循环重复请求；
+- 不修改 TCC、不请求 root 绕过。
+
+Terminal/Python 权限仅是开发证据。
+
+不得等所有任务完成后才验证打包权限。在 window/permission boundary 建立后，应尽早生成具有稳定 bundle identifier 的内部 `.app`，验证：
+
+- 从 `/Applications` 启动；
+- Screen Recording；
+- Accessibility；
+- 重启后权限持久化；
+- 重新打包/升级后的权限行为；
+- 撤销权限后的明确错误状态；
+- 不从 DMG 内直接运行作为标准路径。
+
+`codesign --sign -` 或其他 ad-hoc 签名不能作为公开发布验收。
+
+## 9. ScreenCaptureKit 持久截图
+
+### 9.1 生产路径
+
+连续自动化必须使用：
+
+```text
+SCShareableContent（仅发现或重绑时）
+  → selected SCWindow
+  → SCContentFilter(desktopIndependentWindow:)
+  → SCStreamConfiguration
+  → persistent SCStream
+  → CMSampleBuffer callback
+  → bounded latest-frame publication
+  → task thread 按需读取最新帧
+```
+
+禁止：
+
+- 每帧重新枚举 `SCShareableContent`；
+- 每帧重建 filter/config；
+- 每帧调用 `SCScreenshotManager`；
+- 全显示器截图后猜坐标裁切作为 production fallback；
+- callback 中运行 OCR、模板、YOLO、task 或 Qt 更新。
+
+一次性截图仅允许显式“截图测试”或低频诊断，不得进入 task executor。
+
+### 9.2 输出与存储
 
 每个成功帧必须：
 
@@ -233,277 +363,409 @@ Windows 以最小改动适配现有 HWND；macOS 可绑定 `NSRunningApplication
 - 仅游戏内容区；
 - 不含光标、标题栏、阴影、边框或其他桌面内容。
 
-### 7.3 队列与所有权
+要求：
 
+- `showsCursor = false`；
 - 只保留最新完整帧；
-- 缓冲有固定上限；
-- 可丢弃旧帧，禁止无界队列；
-- 消费期间底层缓冲不得异步覆盖；
-- 每个帧绑定一个不可变几何/截图代次。
+- 存储有固定上限；
+- 允许覆盖旧帧；
+- 慢消费者不能造成队列增长；
+- consumer 读取期间底层缓冲不得异步覆盖；
+- 每帧绑定不可变 geometry/capture generation。
 
-### 7.4 重绑与失败
+### 9.3 重绑和失败
 
 必须检测、恢复或进入明确终止状态：
 
 - 游戏退出；
-- 窗口重建或切换全屏；
-- 尺寸变化；
-- 显示器/缩放变化；
-- 权限撤销；
+- PID/window ID 变化；
+- 窗口重建或全屏切换；
+- 尺寸或 display scale 变化；
+- Screen Recording 撤销；
 - `SCStream` 失败。
 
-重试需退避和终止条件。重绑开始后立即使旧帧和旧坐标失效，新代次建立前不得继续输入。
+重试必须有退避和终止条件。重绑开始后立即使旧帧和旧坐标失效；新 generation 完成前不得继续输入。
 
-## 8. 坐标模型
+### 9.4 诊断指标
 
-任务和识别统一使用**截图帧内部物理像素坐标**。平台后端负责转换到 AppKit 逻辑点、Core Graphics 全局坐标或 Qt 坐标。
+至少记录：
 
-- task 不得混用 ScreenCaptureKit 像素、AppKit 点、CG 全局坐标、Qt logical coordinate 和游戏内部渲染分辨率。
-- 一次输入只能使用当前有效几何代次。
-- 测试覆盖 scale 1.0、2.0、观察到的非整数缩放、原点偏移、resize 和代次替换。
-- 不得假设 Retina 恒为 2.0。
+- capture FPS；
+- latest frame age；
+- overwrite/drop count；
+- PID/window ID；
+- geometry generation；
+- stream rebuild/rebind count。
 
-## 9. Quartz 前台输入契约
+1920×1080 目标配置 30 FPS；稳定低于 20 FPS 时必须分析原因。
 
-生产后端使用 Core Graphics Quartz，至少支持：
+## 10. 几何与坐标模型
+
+必须明确区分：
+
+1. macOS 全局逻辑点；
+2. `SCWindow.frame` 外框；
+3. ScreenCaptureKit 实际帧像素；
+4. 游戏内容区；
+5. Qt logical coordinate；
+6. Retina/display scale；
+7. 游戏内部渲染分辨率。
+
+不得直接使用 `SCWindow.frame.width/height` 声称游戏内容像素尺寸或任务分辨率。
+
+- 视觉管线以实际捕获帧尺寸为事实来源；
+- 若系统帧含装饰区域，必须可靠裁剪客户区；
+- task/识别统一使用帧内物理像素；
+- 平台后端负责“帧像素 → 全局逻辑点/CGEvent 坐标”；
+- 一次输入使用与当前帧相同 generation 的 geometry snapshot；
+- 窗口移动、resize、display 切换、scale 变化或重绑后，旧几何立即失效；
+- 不得假设 scale 固定为 2.0。
+
+调试输出必须能同时展示：`SCWindow` 外框、实际帧、内容区、display scale、点击帧坐标、最终 CGEvent 全局坐标和 generation。
+
+## 11. Quartz 前台输入
+
+生产后端使用公开 Quartz/Core Graphics CGEvent，至少支持：
 
 - `send_key`、`send_key_down`、`send_key_up`；
 - 左/右/中键 down、up、click；
-- 绝对移动；
-- task 需要时的滚轮；
-- 可控制游戏镜头的相对/delta 移动；
-- `release_all()`。
+- mouse button hold；
+- 绝对 movement/click；
+- scroll；
+- `release_all()`；
+- 作为单独能力的 relative/delta movement。
+
+macOS keycode 转换集中在后端。task 保持逻辑键名：
+
+```text
+w a s d
+e q r f t
+space shift tab
+f2 b 1 2 3
+esc enter ...
+```
+
+任务文件不得出现 Mac keycode；公共 key map 不得顶层导入 `win32con`；不得把 Windows VK 直接当作 `CGKeyCode`。
+
+## 12. 激活与前台 fail-closed 语义
+
+任务开始时可以：
+
+```text
+请求激活游戏
+→ 等待
+→ 确认游戏实际成为系统 frontmost
+→ 开始执行
+```
+
+输入后端不得在每次输入前无条件调用激活接口，不得高频抢回用户焦点。
 
 每个普通事件或短原子批次前必须：
 
-1. 验证目标仍存在；
-2. 验证绑定进程仍有效；
-3. 验证目标是系统最前台应用；
-4. 通过后才发送。
+1. 验证 target 存在；
+2. 验证绑定 PID 存活；
+3. 验证目标 app 是系统 frontmost；
+4. 验证 input gate 与 geometry generation；
+5. 条件全部成立才发布 CGEvent。
 
-激活 API 返回成功不代表获得焦点。必须观察到 frontmost 状态，并在后续每次输入前继续检查。
+失焦或失效时：
 
-目标不在前台时：
-
-1. 不发送待发送普通事件；
-2. 阻断后续输入；
+1. 不发送待执行普通事件；
+2. 立即阻断后续普通输入；
 3. 调用 `release_all()`；
-4. task 进入焦点丢失暂停/停止；
+4. 暂停或停止当前自动化；
 5. 显示明确原因；
-6. 只有用户显式操作才能恢复。
+6. 要求用户显式恢复或重启，不自动循环抢焦点。
 
-不得使用 `CGEvent.postToPid` 或向当前任意前台 app 发送普通输入作为回退。
+禁止：
 
-## 10. 持续输入、并发与关闭
+- 失焦后继续向全局事件流发送普通输入；
+- 无声把输入发给当前其他前台 app；
+- 暗中回退到 `CGEvent.postToPid`；
+- 激活 API 返回成功后不观察 frontmost 就继续输入。
 
-- 显式跟踪程序保持的键和鼠标按钮。
-- `release_all()` 幂等，目标消失后仍安全。
-- 单个 release 失败时继续释放其余状态，最后清空内部集合。
-- task 长按操作使用 `try/finally`。
-- `send_key_down`、`send_key_up`、`release_all` 不得为空实现或只记录日志。
-- 普通输入、焦点失效、stop 和 release 必须经过同一个线程安全边界。
-- 目标失效时先关闭新输入闸门，再释放保持状态。
-- 失效后的 release 路径只允许发送对应 key-up/button-up，不得生成新的 down、click、movement、scroll 或 text。
-- 原子批次不得跨越 sleep、frame wait、activate、permission prompt 或其他可能改变焦点的操作。
-- 以下路径必须 release：焦点丢失、任务取消、executor stop、致命截图失败、权限撤销、设备切换、游戏退出、应用退出。
-- 关闭顺序：阻断新输入 → release → 停止 stream/worker → 销毁 Qt/Python 对象。
+## 13. `HeldInputState` 与 `release_all()`
 
-## 11. 相对鼠标硬件门槛
+必须显式跟踪：
 
-未经官方 Mac 游戏实测，不得把 relative/delta 鼠标标记为支持。
+- synthetic held keys；
+- synthetic held mouse buttons；
+- 当前 owner/batch；
+- focus-lost/shutdown/target-lost 状态；
+- current geometry generation。
 
-至少验证：
+普通输入、focus invalidation、task stop 和 release 必须经过同一线程安全边界。
 
-- X/Y 镜头转动；
-- 连续 delta 不会非预期把光标推离区域；
-- 镜头可与 W/A/S/D 长按和攻击同时工作；
-- 中键行为正确；
-- 停止后光标和输入状态合理；
-- 无持续旋转、卡键或卡按钮。
+`release_all()` 必须：
 
-失败时只能声明菜单/基础任务可用，不能声明完整战斗、跑图或路线任务。
+- 幂等、可重复；
+- 窗口或进程消失后仍安全；
+- 尽最大努力发布所有对应 key-up/mouse-up；
+- 单个 release 失败时继续其余 release；
+- 无论 posting 是否成功都清空内部 held state；
+- 失效后只允许为已记录状态发布 up，不得生成 down、click、movement、scroll 或 text。
 
-## 12. 权限
+必须在以下路径调用：
 
-必须显式处理：
+- 焦点丢失；
+- 任务取消；
+- executor stop；
+- 设备切换；
+- 游戏退出；
+- fatal capture；
+- 权限撤销；
+- OK-WW 退出。
 
-- Screen Recording / screen capture；
-- Accessibility synthetic control。
+长按代码可行时使用 `try/finally`。关闭顺序固定为：阻断新输入 → `release_all()` → 停止 stream/workers → 销毁 Qt/Python 对象。
 
-使用系统支持的 preflight/request API。缺失权限时：
+## 14. 真实输入验证顺序
 
-- 显示明确状态和设置路径；
-- 阻止对应截图或输入能力；
-- 不在紧密循环重复请求；
-- 不修改 TCC，不请求 root 绕过。
+### 第一优先级：基础输入
 
-Terminal/Python 权限只是开发证据。最终验收必须使用稳定 bundle identifier 的打包 `.app`。
+- key tap；
+- key down/up；
+- W/A/S/D 持续移动；
+- E/Q/R/F/Space/Shift/Tab；
+- 左/右/中键；
+- mouse button hold/release；
+- 绝对点击；
+- scroll。
 
-## 13. 视觉、分辨率和推理
+### 第二优先级：OK-WW 实际组合
+
+- W + 左键；
+- W + 技能键；
+- W + 中键；
+- 中键锁敌或居中；
+- 右键保持；
+- 方向变化时释放旧方向；
+- stop 后所有 held state 清空。
+
+### 第三优先级：自由相对镜头
+
+- relative X/Y；
+- 连续 delta；
+- 与移动/攻击并发；
+- 光标漂移和恢复；
+- 游戏锁定鼠标状态。
+
+不得为了先做通用 relative mouse 而推迟基础任务和实际组合验证。
+
+## 15. 任务兼容与执行门控
+
+- `config.py` 登记的每个任务必须有显式 macOS compatibility declaration。
+- 未声明任务默认 `unsupported`，不得粗暴按 OS 开启全部。
+- capability requirement 必须反映真实调用与子任务编排；组合任务按最宽依赖门控。
+- capability 缺失时，UI 应禁用/隐藏或在任务开始前给出明确原因；不得运行到中途才发现空方法。
+- `relative_mouse=False` 时，`MAC_BASIC` 和不要求自由镜头的 `MAC_LOCKED_GAMEPLAY` 任务仍可运行。
+- 明确要求自由镜头的任务必须声明 `relative_mouse=True` 并在未通过时被阻止。
+- 当前 `MouseResetTask` 是 Windows workaround，Mac P0 明确 `unsupported`，除非真机证明确有必要并通过新设计验收。
+
+## 16. 视觉、分辨率与推理
 
 - 保持现有 16:9 task 坐标模型。
 - 首个硬件验收为 1920×1080。
 - 后续目标：1280×720、1600×900、2560×1440。
-- 不承诺任意比例。
-- 先标准化内容区、分辨率、BGR，再原样运行现有 template/OCR/color/detection。
-- 只有同分辨率下可重复 Mac 差异且通用调整会损害 Windows 时，才增加 `assets/macos` 覆盖并回退通用资源。
+- 先修内容区、分辨率、BGR 和 geometry，再运行现有 template/OCR/color/YOLO。
+- 只有同分辨率下可重复的 Mac 视觉差异，且通用调整会损害 Windows 时，才增加 `assets/macos`。
 - 不得预复制完整 assets tree。
-- 初始使用 CPU 推理；`use_npu` 在 macOS 关闭或安全忽略。
+- 初始使用 CPU；`use_npu` 在 macOS 关闭或安全忽略。
 - 必须验证 OCR/model wheel 和 native library 的 arm64 兼容性；正确性优先于优化。
 
-## 14. UI、进程、线程和性能
+## 17. UI、可选功能与进程行为
 
-Mac P0 可显式禁用：Win32 GDI overlay、Windows tray、Windows thumbnail、volume/HDR/Night Light、Windows launcher/updater。装饰性功能不得阻塞核心自动化。
+Mac P0 可以明确禁用：
 
-- 继续复用可跨平台的 Qt GUI，不无必要重写。
-- Windows named mutex、admin/elevation、Explorer helper 不得在 Darwin 执行；Mac MVP 不要求 root。
-- ScreenCaptureKit callback 不直接修改 Qt。
-- Python/Qt 销毁前关闭 stream/worker。
-- `close()` 可重复安全调用。
-- 参考 1920×1080 下 SCStream 目标配置 30 FPS；框架消费最新帧，不堆积队列。
-- 稳态低于 20 FPS 时分析原因。
-- 调试记录 FPS、frame age、drop/rebind 状态。
+- Win32 GDI overlay；
+- Windows thumbnail；
+- Windows global hotkey；
+- volume/HDR/Night Light；
+- Windows launcher/updater；
+- Windows QQ/WeChat desktop automation。
 
-## 15. 测试与 CI
+装饰性功能不得阻塞核心自动化。继续复用可跨平台 Qt GUI，不无必要重写。
 
-平台层每次变更都必须保持 Windows 行为。
+Windows named mutex、admin/elevation、Explorer helper 不得在 Darwin 执行。Mac MVP 不要求 root。
 
-自动化测试至少覆盖：
+## 18. 自动化测试与 CI
 
-- Windows 和 Darwin provider selection；
-- Darwin import 不加载 Win32；
-- Windows import 不要求 PyObjC；
-- desktop target 生命周期/rebind；
-- BGRA/BGR、stride/padding、帧所有权和 bounded publication；
-- geometry 和 Retina 转换；
-- held state、幂等 release、单点失败继续释放；
-- focus race 和失效后无普通输入；
-- permission state；
-- repeated close/shutdown order；
-- OK-WW app、executor、全部 task 导入。
+至少新增/保持：
 
-CI 不得要求安装游戏。新增 macOS Python 3.12 job 负责依赖安装、导入和无游戏测试；现有 Windows CI 保持通过。
+### 平台导入
 
-真实游戏属于人工硬件验收，不是 GitHub Actions 前置条件。
+- Darwin 不加载任何 `win32*`；
+- Windows 不要求 PyObjC；
+- 应用入口与全部登记 task/scene/custom tab 可导入。
 
-## 16. 打包与分发
+### capability 与任务兼容
 
-源码/dev bring-up 优先，不被当前 Windows PyAppify installer 阻塞。
+- all-false 默认；
+- missing/supports；
+- enable/执行前检查；
+- 所有登记任务有声明；
+- 不满足时不可执行；
+- `relative_mouse=False` 不阻断 basic/locked requirement；
+- full-camera requirement 被阻止；
+- `MouseResetTask` Mac 明确 unsupported。
 
-源码稳定后优先评估 `pyside6-deploy` / Nuitka，生成自包含 `.app`。最终 PR 前必须用稳定 bundle identifier 的内部包验证：
+### 截图与几何
 
-- arm64 native library；
-- Qt platform plugin；
-- OpenCV、OCR/inference、PyObjC；
-- assets/i18n；
-- Screen Recording 与 Accessibility；
-- shutdown release/stream close。
+- BGRA→BGR；
+- row stride/padding；
+- frame ownership；
+- latest-frame overwrite；
+- bounded storage；
+- resize/rebind；
+- scale 1.0/2.0/非整数假设；
+- 标题栏/内容区裁剪；
+- frame pixel→logical/global；
+- stale generation rejection。
 
-公开直接分发必须使用 Developer ID Application、Hardened Runtime、安全时间戳、Apple notarization、staple，并在干净环境验证。不得把 unsigned/ad-hoc 包当作正常公开产物，也不得提交发布凭据。
+### 输入状态
 
-## 17. Windows 回归边界
+- key down/up；
+- mouse down/up；
+- repeated down；
+- release 单点失败；
+- `release_all()` 幂等；
+- focus loss 拒绝普通输入；
+- target exit；
+- permission/fatal capture；
+- shutdown order。
 
-`ok-script` 必须保持：
+CI 不安装游戏。macOS Python 3.12 job 做依赖、import 和无游戏测试；现有 Windows job必须保持通过。
 
-- WGC/BitBlt 选择；
-- 当前 Windows 输入；
-- HWND 选择；
-- 现有 task API 与配置键；
-- ADB/browser 行为。
+## 19. 真机验收门槛
 
-优先用最小适配包装现有 Windows 实现，不为视觉对称大规模重写已工作代码。
+记录：
 
-## 18. 真实硬件验收矩阵
+- Mac 型号/芯片；
+- macOS 版本；
+- 游戏版本；
+- OK-WW/ok-script commit；
+- 窗口模式；
+- 分辨率；
+- display scale；
+- 是否外接显示器；
+- source 或 packaged identity。
 
-### 应用/窗口
+### 19.1 基础 MVP
 
-- [ ] 找到进程和正确窗口；
-- [ ] 显示 PID、bundle ID、window ID、标题、内容几何；
-- [ ] 激活后观察到 frontmost；
-- [ ] Command-Tab 状态变化；
-- [ ] 检测退出；
-- [ ] 处理或明确报告窗口重建和尺寸变化。
+必须通过：
 
-### 截图
+- 找到/选择正确窗口；
+- PID、bundle ID、window ID、外框/内容区/scale 可观测；
+- 1920×1080 内容帧；
+- 不含标题栏、边框、阴影、光标；
+- OCR/模板基础识别；
+- key tap；
+- key hold/release；
+- 左/中/右键；
+- 绝对点击；
+- focus loss 不泄漏输入；
+- 一个 `MAC_BASIC` 任务端到端；
+- Windows 测试通过。
 
-- [ ] 1920×1080 连续 BGR `uint8`；
-- [ ] 不含光标、标题栏、边框；
-- [ ] 颜色正确；
-- [ ] 连续场景切换稳定；
-- [ ] 至少 1000 帧无 stall/明显泄漏/队列增长；
-- [ ] resize/rebind 状态正确；
-- [ ] FPS/frame age 可观测。
+### 19.2 `MAC_LOCKED_GAMEPLAY` 声明
 
-### 键盘
+仅在以下通过后开放对应任务：
 
-- [ ] W/A/S/D tap、hold、release；
-- [ ] E/Q/R/F/T；
-- [ ] Space、Shift、Tab；
-- [ ] 实际使用时的 F2、B、1/2/3。
+- W/A/S/D 持续输入；
+- 方向切换释放；
+- W + 左键；
+- W + 技能键；
+- 中键锁敌或居中；
+- 右键保持；
+- stop/失焦无卡键；
+- 对应代表性任务端到端。
 
-### 鼠标
+### 19.3 `MAC_FULL_CAMERA` 声明
 
-- [ ] 左/右/中键；
-- [ ] hold/release；
-- [ ] 绝对坐标；
-- [ ] relative X/Y；
-- [ ] movement + attack + camera；
-- [ ] stop 后状态合理。
+仅在以下通过后开放：
 
-### 安全
+- relative X/Y；
+- continuous delta；
+- 与移动/攻击并发；
+- 光标状态恢复；
+- 对应路线任务端到端。
 
-- [ ] hold W 时 Command-Tab；
-- [ ] hold modifier/button 时切换应用；
-- [ ] 点击其他应用；
-- [ ] 撤销 Screen Recording；
-- [ ] 撤销 Accessibility；
-- [ ] 持续输入时退出游戏；
-- [ ] 持续输入时关闭 OK-WW；
-- [ ] 上述场景无字符、点击或普通输入泄漏到错误应用。
+## 20. 打包与公开分发
 
-## 19. 能力状态与声明
+- window/permission 边界完成后尽早建立稳定 bundle identifier 的内部 `.app`。
+- 内部包验证 arm64 libraries、Qt plugin、OpenCV、OCR/inference、PyObjC、assets/i18n、TCC 和 shutdown。
+- 最终 MVP PR 前必须完成 packaged-app permission validation。
+- 公开分发另要求 Developer ID Application、Hardened Runtime、timestamp、notarization、staple 和干净用户环境 Gatekeeper 验证。
+- 签名/公证凭据不得进入仓库。
 
-只使用：
+## 21. MaaEnd / MaaFramework 参考边界
 
-1. `not-implemented`；
-2. `unit-tested`；
-3. `hardware-validated`；
-4. `packaged-app-validated`。
+可以参考其公开实现确认以下路线具有现实可行性：
 
-README、UI、PR 和 release note 不得宣称高于证据的状态。每条证据记录 commit SHA、命令或人工步骤、Mac/系统/游戏版本、分辨率、窗口模式和结果。回归会重新打开对应 gate。
+- 窗口枚举/选择；
+- ScreenCaptureKit；
+- Quartz key down/up/hold；
+- 左/右/中键；
+- 固定坐标点击；
+- 部分实时视觉辅助。
 
-## 20. 最终完成定义
+不得照搬：
 
-最终 MVP PR 前必须满足：
+- 每次截图重新枚举并使用一次性 API；
+- 直接用 `SCWindow.frame` 当内容像素；
+- 每次输入前自动激活目标；
+- ad-hoc/不稳定 app identity 作为 TCC 验收；
+- 后台 controller 作为本分支增加后台支持的理由。
 
-- arm64 macOS 安装和导入不加载 Win32；
-- 能发现/选择官方游戏；
-- ScreenCaptureKit 提供标准帧；
-- 核心 template/OCR 在真实 Mac 图像通过；
-- Quartz keyboard/mouse 控制真实游戏；
-- relative camera 硬件通过；
-- focus loss 阻止新输入并 release；
-- 至少一个简单非战斗 task 端到端通过；
-- 声称战斗支持前至少一个代表战斗流程通过；
-- Windows tests 通过；
-- packaged `.app` 权限行为通过；
-- 文档、限制、故障排查和回滚完整。
+MVP 不引入 MaaFramework binary/dylib。未来引入必须独立 ADR。
 
-公开发布前再完成签名、公证和 Gatekeeper 验证。
+## 22. 文档语言与能力声明
 
-## 21. 禁止的捷径
+所有新增或修改的 macOS 工程约束、实施说明和验收记录默认使用中文。以下保留英文：API、类名、函数名、文件路径、配置键、日志状态码和命令。
+
+文档、UI、README、PR、release note 必须明确：
+
+1. 当前实际支持什么；
+2. 哪些 task 已 `validated`；
+3. 哪些 task 是 `experimental`；
+4. 哪些 task `unsupported`；
+5. relative mouse 状态；
+6. 中键和持续按键状态；
+7. 权限和安装要求；
+8. 已知限制；
+9. 不支持后台。
+
+不得把未执行的真实游戏或 packaged-app 测试写成“已支持”。
+
+## 23. 最终完成定义
+
+最终 MVP PR 的最小产品范围可以是：
+
+- 基础 MVP 全部通过；
+- 至少一个 `MAC_BASIC` 任务端到端；
+- focus/release 安全通过；
+- Windows 回归通过；
+- stable-identity `.app` 权限通过；
+- 未通过的任务明确 experimental/unsupported；
+- relative mouse 状态如实记录。
+
+若 `MAC_LOCKED_GAMEPLAY` 通过，可增加对应任务声明；若 relative mouse 未通过，不阻断基础 MVP，但不得声称 `MAC_FULL_CAMERA`、完整路线或 Windows 功能对等。
+
+## 24. 禁止的捷径
 
 不得：
 
-- 全桌面截图后猜坐标裁切作为生产后端；
-- `pyautogui`/`pynput` 代替平台架构；
-- 其他应用前台时发送普通输入；
-- 猜测并硬编码唯一 bundle ID 或恒定标题；
-- 假设 Retina 恒为 2.0；
-- 静默忽略权限、down/up/release 或 capture 失败；
-- relative camera 失败后仍声称战斗/路线支持；
-- task 直接导入 OS API；
-- OK-WW 私建兼容 shim 或复制后端；
-- 使用私有 API、BetterDisplay、虚拟显示、注入或 hook；
-- 使用 `CGEvent.postToPid` 或任意前台输入回退；
-- 让旧帧/旧几何在重绑期间继续驱动输入。
+- 把 MaaEnd “MacOS-Background” 当作增加后台支持的理由；
+- 加入 BetterDisplay、虚拟显示器或 `CGVirtualDisplay`；
+- 使用 `CGEvent.postToPid`；
+- 注入、Metal hook 或反作弊绕过；
+- 用每帧 `SCScreenshotManager` 代替持久流；
+- 用 `SCWindow.frame` 直接宣称内容分辨率；
+- 每次输入自动抢回焦点；
+- 失焦后继续发全局普通输入；
+- 用 `pynput`/`pyautogui` 作为 production architecture；
+- task 直接导入 AppKit、Quartz 或 Win32；
+- 预先复制全部视觉资源；
+- 因 relative mouse 未完成而阻断已通过的基础 MVP；
+- relative mouse 未完成时宣称完整战斗/路线支持；
+- 通过删除或降低安全检查让测试通过；
+- 让旧帧/旧几何在 rebind 期间继续驱动输入。

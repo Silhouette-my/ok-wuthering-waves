@@ -117,8 +117,10 @@ Put these in `ok-script`:
 - ScreenCaptureKit capture implementation
 - Quartz foreground keyboard/mouse implementation
 - foreground/focus guard
+- held-input state and idempotent `release_all()`
 - cursor service
 - permission checks
+- `DeviceCapabilities` and generic capability gates
 - platform-neutral device routing
 - platform-conditional dependency/import logic
 
@@ -127,7 +129,7 @@ Put these in `ok-wuthering-waves`:
 - Wuthering Waves macOS app/window matching configuration
 - game hotkey mapping choices
 - Mac-specific asset overrides, if actually required by visual differences
-- task-level compatibility decisions
+- task-level capability requirements and `validated` / `experimental` / `unsupported` status
 - replacement of the two current direct `win32api` usages with framework services
 - user-facing documentation specific to OK-WW
 
@@ -187,6 +189,8 @@ For new platform services:
 - key/button down state must be tracked explicitly
 - `release_all()` must be idempotent and safe to call repeatedly
 - input functions must check the foreground guard immediately before posting an event
+- tasks must declare precise capabilities and be rejected before execution when the active provider cannot satisfy them
+- `relative_mouse=False` must not block a task that only requires basic or locked-gameplay input
 - do not use a stale frame after a capture/window recreation failure
 
 ## ScreenCaptureKit Rules
@@ -205,9 +209,28 @@ For new platform services:
 - Do not make `pynput` the architectural abstraction; it may be used only as an isolated diagnostic/prototype.
 - Support key down/up separately; many OK-WW combat paths depend on held keys.
 - Support left/right/middle mouse buttons.
-- Support absolute movement and a tested relative-mouse/delta path for camera control.
-- Treat relative camera movement as a hardware acceptance gate: do not claim combat support until it works in the real game.
+- Support absolute movement for the basic MVP. Implement and validate relative/delta movement as a separate `relative_mouse` capability for tasks that truly need free-camera control.
+- Do not make `relative_mouse` a global MVP gate. `MAC_BASIC` and hardware-validated `MAC_LOCKED_GAMEPLAY` tasks may ship without it.
+- Do not claim `MAC_FULL_CAMERA`, free-camera routes, complete route parity, or complete Windows parity until relative/delta movement passes real-game hardware validation.
 - The game must be frontmost before every input batch/event.
+- A task may request activation once at startup and must observe the game becoming frontmost; the input backend must never reactivate the game before every event.
+
+## macOS Task Capability Model
+
+Use two independent axes:
+
+1. provider capability evidence: `not-implemented`, `unit-tested`, `hardware-validated`, `packaged-app-validated`;
+2. task status: `validated`, `experimental`, `unsupported`.
+
+Task risk levels are:
+
+- `MAC_BASIC`: menu, login, claim, backpack, enhancement, fixed-page OCR/template and fixed-coordinate input;
+- `MAC_LOCKED_GAMEPLAY`: held W/A/S/D, middle-button lock/center, left/right holds and keyboard/mouse combinations, without requiring arbitrary camera delta;
+- `MAC_FULL_CAMERA`: free relative X/Y camera movement and precise route steering.
+
+Every registered task must have an explicit declaration. Do not enable all tasks merely because the operating system is macOS. Unknown or undeclared tasks fail closed. An experimental task may be used for hardware acceptance, but must not be described as supported.
+
+Current OK-WW code uses `center_camera()` as a middle-button action and contains no registered task call to free-camera delta. Validate actual held-key/middle-button combinations before investing in general relative movement.
 
 ## Permissions
 
@@ -267,9 +290,13 @@ Do not block platform bring-up on the current Windows PyAppify installer.
 For the Mac port:
 
 - source/dev execution comes first on the integration branch
+- create a stable-bundle-identifier internal `.app` as soon as window and permission boundaries exist; do not postpone TCC identity testing until every task is complete
+- validate launch from `/Applications`, permission persistence across restart/rebuild, and explicit behavior after revocation
+- do not run from inside a DMG as the standard acceptance path
+- ad-hoc signing is not public-release evidence
 - packaged `.app` validation is required before opening the final MVP PR; Developer ID notarization remains a public-release gate
 - prefer the supported PySide deployment path (`pyside6-deploy` / Nuitka) unless testing proves another path is required
-- public distribution must use a stable bundle identifier, Developer ID signing, Hardened Runtime, and Apple notarization
+- public distribution must use a stable bundle identifier, Developer ID signing, Hardened Runtime, timestamp, notarization, and staple
 - do not add private APIs to the foreground MVP
 
 ## Safety / Failure Behavior
@@ -286,3 +313,15 @@ If any of these conditions occurs, stop posting input and release held state:
 - task/executor/app is stopping
 
 Never “best effort” by sending global input to whatever app is currently active.
+
+## MaaEnd / MaaFramework Reference Boundary
+
+MaaEnd and MaaFramework may be read as evidence that ScreenCaptureKit window capture and Quartz CGEvent input are feasible. They are references, not runtime dependencies.
+
+Do not copy their per-request screenshot path, use `SCWindow.frame` as content pixel size, reactivate the target before every input, or treat a background controller as proof that this branch may add background support. Adding MaaFramework binaries or dylibs requires a separate ADR and is outside this MVP.
+
+## Documentation Language and Claims
+
+New or modified macOS engineering constraints, implementation plans, and acceptance records use Chinese by default. Keep API names, class names, function names, paths, configuration keys, log state codes, and commands in English.
+
+Every status report must separate completed automated evidence from real-game and packaged-app evidence. Never label an unperformed real-game test as supported.
