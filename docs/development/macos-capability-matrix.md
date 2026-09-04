@@ -4,7 +4,7 @@
 
 适用分支：`feature/macos-foreground-mvp`
 
-状态：阶段 A/B 的本地与远端无游戏 gate 已通过；阶段 C 的窗口目标、fake discovery/rebind、前台观察和权限状态契约已通过本地单元测试。Stage C 远端 runner、真实《鸣潮》和 packaged `.app` 仍待验收。
+状态：阶段 A/B/C 的本地与远端无游戏 gate 已通过；阶段 D 的 persistent `SCStream`、frame ownership、lifecycle 与 geometry contract 已在 `ok-script` 提交 `3f27ea6601eecf3984d380e2f830bb7cc398bb90` 通过本地自动化验证。Stage D 远端 runner、真实《鸣潮》和 packaged `.app` 仍待验收。
 
 ## 1. 两个独立状态轴
 
@@ -68,37 +68,37 @@ relative mouse 缺失只阻止 `MAC_FULL_CAMERA` 和明确声明该字段的任�
 | CAP-04 | `DeviceManager` / executor / shared capture/interaction 导入不加载 Win32 | `ok-script` | `unit-tested` | `tests/test_platform_imports.py` 与完整 framework suite 通过 | macOS CI |
 | CAP-05 | Qt app/start/debug/notification optional modules 在 Darwin 可导入 | `ok-script` | `unit-tested` | headless/offscreen import contracts 通过 | native WindowServer UI smoke 与 packaged app |
 | CAP-06 | 所有登记 OK-WW entry/task/scene/custom tab 在 Darwin 可导入 | both | `unit-tested` | `tests/test_macos_imports.py` 通过，无 forbidden module | macOS CI |
-| CAP-07 | Windows provider 行为在平台拆分后保持 | `ok-script` | `unit-tested` | Windows branch workflow 已通过；Stage C 新增 HWND adapter 另有 fake contract tests | Stage C 提交后的 Windows runner 重跑 |
+| CAP-07 | Windows provider 行为在平台拆分后保持 | `ok-script` | `unit-tested` | Stage C `ok-script` Windows run `33865913439` 通过；新增 HWND adapter 另有 fake contract tests | Stage D 提交后的 Windows runner 重跑 |
 | CAP-08 | `DeviceCapabilities` 默认 fail-closed、matching 和 task preflight | `ok-script` | `unit-tested` | `tests/test_device_capabilities.py` 通过；enable/execute 前检查 | 在真实 Mac provider 接入后重跑 |
 | CAP-09 | 所有登记 OK-WW task 有明确 Mac declaration | OK-WW | `unit-tested` | `tests/test_macos_capabilities.py` 检查 17/17 覆盖 | 真实 capability 与 task end-to-end |
 
 ## 5. Desktop target、窗口与权限
 
-| ID | 能力 | 当前证据 | 下一门槛 |
-|---|---|---|---|
+| ID | 能力 | 当前证据 | 已有证据 | 下一门槛 |
+|---|---|---|---|---|
 | CAP-10 | 平台中立 `DesktopWindowTarget` contract | `unit-tested` | immutable snapshot、明确 coordinate-space、丢失清空与 generation contract tests | Stage D frame/geometry integration |
 | CAP-11 | 现有 HWND 行为通过 Windows adapter | `unit-tested` | composition fake `HwndWindow` adapter tests；未改 Windows capture/input 主路径 | Stage C 提交后的 Windows unit/CI regression |
-| CAP-12 | 枚举官方 Mac app/window candidates | `not-implemented` | 真实客户端 discovery record |
+| CAP-12 | 枚举官方 Mac app/window candidates | `not-implemented` | 尚无官方客户端候选枚举证据 | 真实客户端 discovery record |
 | CAP-13 | PID/bundle/window binding、manual selection 与 refresh/rebind | `unit-tested` | fake adapter 覆盖稳定 hint、歧义手选、PID/window replacement、bind 前二次枚举/liveness recheck、刷新期/异常 fail closed | 官方客户端 process/window recreation hardware test |
 | CAP-14 | 观察系统 frontmost 状态 | `unit-tested` | fake adapter 覆盖实时 frontmost 观察；不使用枚举时的旧快照代替观察 | Command-Tab hardware observation |
 | CAP-15 | request activation 后确认 observed activation | `unit-tested` | contract tests 证明 request accepted 不等于 observed frontmost | real-game hardware validation |
 | CAP-16 | Screen Recording permission status/request/revoke | `unit-tested` | public API mapping 与 required/requested/granted/revoked/error 状态机 fake tests；并发请求串行化且 requested 后禁止重复请求 | source identity hardware + stable `.app` TCC |
 | CAP-17 | Accessibility permission status/request/revoke | `unit-tested` | public API mapping 与 required/requested/granted/revoked/error 状态机 fake tests；并发请求串行化且 requested 后禁止重复请求 | source identity hardware + stable `.app` TCC |
-| CAP-18 | 稳定 bundle identifier 的早期内部 `.app` identity checkpoint | `not-implemented` | 阶段 C 后从 `/Applications` 验证 permission persistence |
+| CAP-18 | 稳定 bundle identifier 的早期内部 `.app` identity checkpoint | `not-implemented` | 尚未生成或安装稳定 identity 的内部 `.app` | 阶段 C 后从 `/Applications` 验证 permission persistence |
 
 ## 6. Capture 与 geometry
 
-| ID | 能力 | 当前证据 | 下一门槛 |
-|---|---|---|---|
-| CAP-20 | selected-window persistent `SCStream` | `not-implemented` | 阶段 D implementation + lifecycle tests |
-| CAP-21 | BGR `uint8` `(height,width,3)` frame | `not-implemented` | synthetic BGRA/stride tests，再做 hardware frame |
-| CAP-22 | content-only frame，无 cursor/title/border/shadow | `not-implemented` | official-client screenshot inspection |
-| CAP-23 | bounded latest-frame publication 与 ownership | `not-implemented` | concurrency/ownership/overwrite tests |
-| CAP-24 | stream/window recreation 与 bounded rebind | `not-implemented` | failure/rebind tests + hardware |
-| CAP-25 | immutable geometry generation 与 stale-frame rejection | `not-implemented` | generation unit tests |
-| CAP-26 | frame pixel → global logical/CGEvent coordinate | `not-implemented` | scale 1.0/2.0/非整数、offset、crop、resize tests |
-| CAP-27 | 1920×1080 1000+ continuous frames | `not-implemented` | official-client FPS/frame-age/leak/queue evidence |
-| CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `not-implemented` | 阶段 D diagnostics |
+| ID | 能力 | 当前证据 | 已有证据 | 下一门槛 |
+|---|---|---|---|---|
+| CAP-20 | selected-window persistent `SCStream` | `unit-tested` | `SCContentFilter(desktopIndependentWindow:)`、一个显式配置的 persistent `SCStream`、protocol callback 与 fake lifecycle tests | 官方客户端真实 stream hardware test |
+| CAP-21 | BGR `uint8` `(height,width,3)` frame | `unit-tested` | synthetic BGRA、row stride、padding、crop 与 owned contiguous copy tests | official-client color/frame hardware test |
+| CAP-22 | content-only frame，无 cursor/title/border/shadow | `not-implemented` | `showsCursor=False`、contentRect crop 和可用系统上的 single-window shadow suppression 已接入；真实内容边界仍无证据 | official-client screenshot inspection |
+| CAP-23 | bounded latest-frame publication 与 ownership | `unit-tested` | 单槽 latest-frame store、overwrite、慢 consumer bounded storage 和 IOSurface 脱离 tests | 1000+ frames memory/queue hardware evidence |
+| CAP-24 | stream/window recreation 与 bounded rebind | `unit-tested` | target/capture generation、resize/scale rebuild、target loss、permission revoke、unexpected stop、stop timeout fail-closed tests | window/display/PID recreation hardware test |
+| CAP-25 | immutable geometry generation 与 stale-frame rejection | `unit-tested` | callback 前后 generation recheck、explicit invalidation、stale callback 与 start/stop race tests | hardware resize/rebind observation |
+| CAP-26 | frame pixel → global logical/CGEvent coordinate | `unit-tested` | scale 1.0/2.0/1.5、offset、crop、positive Mac logical geometry tests | actual game four-corner coordinate hardware validation |
+| CAP-27 | 1920×1080 1000+ continuous frames | `not-implemented` | 尚无真实连续帧证据 | official-client FPS/frame-age/leak/queue evidence |
+| CAP-28 | 同时诊断 outer frame、actual frame、content、scale 和 posted coordinate | `unit-tested` | diagnostics 提供 FPS、frame age、overwrite/drop、target/capture generation、geometry、invalidation 与 rebuild；posted coordinate 留待 Stage E | hardware capture diagnostics + Stage E posted-coordinate trace |
 
 ## 7. Foreground input 与安全
 
@@ -174,8 +174,8 @@ CAP-41 未通过时不阻止 CAP-60，也不阻止已经通过的 CAP-62；但 C
 
 | ID | 能力 | 当前证据 | 下一门槛 |
 |---|---|---|---|
-| CAP-70 | macOS Python 3.12 no-game branch CI | `unit-tested` | OK-WW guardrail run `33860501014` 的 `macos-latest` job 通过；Stage C 尚待重跑 | Stage C 提交后的远端绿色 |
-| CAP-71 | Windows branch regression CI | `unit-tested` | OK-WW legacy run `33860501048` 与 guardrail run `33860501014` 的 Windows jobs 通过；Stage C 尚待重跑 | Stage C 提交后的两仓库 Windows runner 绿色 |
+| CAP-70 | macOS Python 3.12 no-game branch CI | `unit-tested` | Stage C `ok-script` run `33865913507` 与 OK-WW guardrail run `33865949644` 通过 | Stage D 提交后的远端绿色 |
+| CAP-71 | Windows branch regression CI | `unit-tested` | Stage C `ok-script` run `33865913439`、OK-WW legacy run `33865949610` 与 guardrail run `33865949644` 通过 | Stage D 提交后的两仓库 Windows runner 绿色 |
 | CAP-72 | stable bundle-ID arm64 internal `.app` launch | `not-implemented` | 阶段 C/H internal package |
 | CAP-73 | packaged Screen Recording permission/persistence/revoke | `not-implemented` | `/Applications` identity validation |
 | CAP-74 | packaged Accessibility/input/focus safety | `not-implemented` | stable identity hardware |
@@ -186,12 +186,13 @@ CAP-41 未通过时不阻止 CAP-60，也不阻止已经通过的 CAP-62；但 C
 
 截至本记录：
 
-- 可声明“平台安全安装/导入、capability/task declaration，以及 Stage C target/permission contract 已在无游戏环境通过单元测试”；
+- 可声明“平台安全安装/导入、capability/task declaration、Stage C target/permission contract，以及 Stage D capture/lifecycle/geometry contract 已在无游戏环境通过单元测试”；
 - macOS `SCShareableContent` 与 Quartz metadata adapter 已有 fake API mapping tests，但本机没有官方客户端，CAP-12/CAP-50 仍不得提升；
 - 不可声明已经发现或捕获官方游戏窗口；
-- 不可声明 persistent `SCStream`、Quartz input 或 packaged app 已实现；权限仅完成状态/请求 contract，真实授权、撤销和稳定应用身份仍未验收；
+- persistent `SCStream` 生产路径已实现并通过 fake lifecycle/PyObjC construction smoke，但尚未启动真实 capture、不得声明 1920×1080 内容帧或 1000+ 帧稳定性；
+- 不可声明 Quartz input 或 packaged app 已实现；权限仅完成状态/请求 contract，真实授权、撤销和稳定应用身份仍未验收；
 - 不可声明中键、持续按键、locked gameplay 或 relative mouse 在游戏中有效；
 - 所有候选任务仍为 `experimental`，`MouseResetTask` 为 `unsupported`；
 - 不支持后台；
-- Windows 行为仍需远端 Windows runner 证明；
+- Stage C Windows 行为已有远端 runner 证据；Stage D Windows 回归仍需新提交的远端 runner 证明；
 - README、UI、PR 和 release note 必须采用上述较低状态。
