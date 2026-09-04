@@ -203,6 +203,21 @@ config = {
         'check_night_light': True,
         'force_no_night_light': False,
     },
+    # Stage C macOS discovery hints. Bundle/application identity stays empty
+    # until it is observed from the official client. Title matches are only an
+    # auxiliary candidate filter and never authorize automatic binding.
+    'macos': {
+        'bundle_identifiers': [],
+        'application_names': [],
+        'title_patterns': [
+            r'^Wuthering Waves(?:\s.*)?$',
+            r'^鸣潮(?:\s.*)?$',
+            r'^鳴潮(?:\s.*)?$',
+        ],
+        'allowed_layers': [0],
+        'minimum_width': 0,
+        'minimum_height': 0,
+    },
     'window_size': {
         'width': 1200,
         'height': 800,
