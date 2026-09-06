@@ -1,4 +1,5 @@
 from config import config
+from dataclasses import replace
 from ok.device.window_target import (
     WindowCandidate,
     WindowGeometry,
@@ -50,6 +51,14 @@ def test_hardware_observed_bundle_identity_selects_the_official_client():
 
     assert result.status is WindowSelectionStatus.SELECTED
     assert result.selected is candidate
+
+    helper = replace(candidate, window_id=8, outer_geometry=WindowGeometry(0, 0, 52, 20))
+    # Enumeration order must not bind a small floating helper before the game.
+    assert select_window_candidate([helper, candidate], hints).selected is candidate
+    assert select_window_candidate([candidate, helper], hints).selected is candidate
+    assert select_window_candidate([helper], hints).selected is None
+    other_main = replace(candidate, window_id=9)
+    assert select_window_candidate([candidate, other_main], hints).selected is None
 
 
 def test_manual_window_choice_produces_only_stable_persistable_fields():
