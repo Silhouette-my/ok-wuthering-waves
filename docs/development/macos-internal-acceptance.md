@@ -6,7 +6,17 @@
 
 已有 manifest 对 285 个 native 文件的 minos 分布为 11.0×109、13.0×99、14.0×13、15.0×64；主程序/Python/PySide6 wrapper 15.0 决定整包下限，不能用 Qt 原生库或 OpenVINO 较低的 minos 推断整包支持 13/14。构建、plist 和 all-native 验证应保持 15.0 一致，禁止伪改标记。
 
-下方按时间记录的“当前安装”“CURRENT INTERNAL BUILD”“最新源码”和“当前结论”均指各节当时的产物与工作树，不是本轮整理后 exact SHA 的通过证明。早期“产品 13+ 目标不变”已由 ADR 0003 取代；历史原始证据保留。Windows/macOS CI、真实游戏与 packaged-app 三类证据须独立记录：本轮 exact-SHA CI 尚待结果，不预填通过；本轮没有新的签名、公证、权限或游戏操作，旧包 CDHash/dirty 指纹不能自动继承到新提交或新包。
+下方按时间记录的“当前安装”“CURRENT INTERNAL BUILD”“最新源码”和“当前结论”均指各节当时的产物与工作树，历史原始证据继续保留。早期“产品 13+ 目标不变”已由 ADR 0003 取代。当前 exact-SHA Windows/macOS CI 已全部通过；最终 clean-source 内部包也已重建、安装，并由用户确认手工实测运行正常。仍须把这种总体 package smoke 与逐项权限撤销、故障注入、每个 task 端到端及公开签名/公证证据分开，不能用总体“正常”补填未逐项记录的 gate。
+
+## 最终 exact-SHA 内部包人工复验（2026-09-06）
+
+- 运行时代码：ok-script `91a897071c6013930a9e23452e7b61fd112af310`；OK-WW `c03138895323413a98eca4ca59e9434bcba1682f`。构建 provenance 记录两个仓库均 `dirty=false`。
+- 安装包：`/Applications/OK-WW.app`；bundle ID `org.okww.foreground.internal`；CDHash `6584ba8b8964462ede0aa932113a1c9c8ecfcdd8`；Apple Silicon arm64；packaged MVP 最低 macOS 15.0。
+- 静态构建门槛：285 个 native 文件、最低系统版本、deep/strict ad-hoc 签名、资源/图标/翻译和禁止文件/个人路径扫描均已通过；对应 manifest 与包内 provenance 一致。
+- 自动化：ok-script exact HEAD 的 macOS/Windows CI 均 success；OK-WW exact HEAD 的 macOS/Windows guardrail 与主 Windows legacy workflow 均 success。详细 run ID 见规划目录 `macos-closeout-2026-09-06.md`。
+- 用户随后确认该最终 package 已完成手工实测且运行正常。该确认作为**最终 exact-SHA 包级人工 smoke 通过**记录，用于关闭“最终 clean-source 包是否能正常运行”的总体门槛。
+- 本次确认没有逐项给出权限 revoke/regrant、人工制造 capture stall、每个 experimental task 的独立端到端步骤或 Developer ID/notarization/Gatekeeper clean-user 结果，因此这些项目仍保持各自原有状态；任务 registry 不因总体 smoke 批量升级。
+- ad-hoc 包不构成公开发行签名证据；当前下一阶段转为与维护者确认两个协调 PR 的提交方式、`ok-script` 最终不可变依赖身份及 reviewer 希望保留/补充的验收材料。
 
 ## 当前安装：任务自动连接包（2026-09-06 19:35）
 

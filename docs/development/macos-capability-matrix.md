@@ -5,38 +5,35 @@
 本层重新按 source/unit、source/hardware、packaged/hardware 汇总。下方 2026-09-04
 表格只保留为历史，不再用于当前支持声明。provider evidence 与 task status 仍是独立轴。
 
-当前 packaged MVP 产品基线为 Apple Silicon、macOS 15+，见 [ADR 0003](decisions/0003-macos-packaged-minimum-version.md) 与 [安装说明](../macos-installation.md)。框架 13+ API 设计与 host gate 保留，不构成当前包支持 13/14 的承诺。此为用户授权的 contributor 分支决定，upstream 尚未接受；本次文档修订不提升任务状态。下列 source/unit 数值与硬件项目属于已记录工作树；整理后 exact-SHA CI 与新包验收须另验，不能沿用旧包指纹。
+当前 packaged MVP 产品基线为 Apple Silicon、macOS 15+，见 [ADR 0003](decisions/0003-macos-packaged-minimum-version.md) 与 [安装说明](../macos-installation.md)。框架 13+ API 设计与 host gate 保留，不构成当前包支持 13/14 的承诺。此为用户授权的 contributor 分支决定，upstream 尚未接受。
 
-历史构建源码基线：ok-script `3310d103e70233e675e7bf7bf2e9203003b15a97`、OK-WW
-`89280123e5f7c446d1b823b9642a8bf8eae66adc`，构建时均有未提交修改。
-精确构建输入以包内 `Contents/Resources/build-provenance.json` 为准，
-签名后 CDHash 和全部 native minos 以产物旁的 `build-manifest.json` 为准。
-外部 manifest 不是签名证书；外部 probe 的实际加载 hash 必须逐次记录，
-不能只靠 CDHash 归因。旧测试没有 probe hash 的，明确保留为未记录。
+当前冻结的运行时代码基线为 ok-script `91a897071c6013930a9e23452e7b61fd112af310` 与 OK-WW `c03138895323413a98eca4ca59e9434bcba1682f`；构建 provenance 记录两个仓库均 `dirty=false`。对应 Windows/macOS exact-SHA CI 已全部完成并通过。最终内部包安装于 `/Applications/OK-WW.app`，CDHash `6584ba8b8964462ede0aa932113a1c9c8ecfcdd8`，arm64、285 个 native 文件、15.0 最低版本、deep/strict ad-hoc 签名及静态 verifier 均已通过。用户随后确认该最终包手工实测运行正常；这是当前 exact-SHA package 的包级人工 smoke 证据，不自动替代未逐项记录的权限撤销、所有任务端到端、Developer ID/公证或 clean-user Gatekeeper 证据。
 
-| 能力/ID | source/unit | source/hardware | packaged/hardware（历史，不能自动继承到新包） | 当前下一门槛 |
+精确构建输入以包内 `Contents/Resources/build-provenance.json` 为准，签名后 CDHash 和全部 native minos 以产物旁的 `build-manifest.json` 为准。外部 manifest 不是签名证书；外部 probe 的实际加载 hash 必须逐次记录，不能只靠 CDHash 归因。旧测试没有 probe hash 的，明确保留为未记录。
+
+| 能力/ID | source/unit | source/hardware | packaged/hardware | 当前下一门槛 |
 |---|---|---|---|---|
-| 安装、导入、声明 CAP-01～09 | unit-tested | 原生 GUI 已运行 | 独立包 GUI/Qt 已运行 | Windows deferred / 未验证；最终不可变依赖 |
-| 主窗口绑定/前台 CAP-10～15/50 | unit-tested | 官方游戏绑定、W 失焦已验证 | 已绑定与重启绑定；战斗曾误报退出 | 最新多源退出分类修复包复验 |
-| 权限 CAP-16/17/73/74 | unit-tested | 两权限授权输入/捕获有证据 | same-build 重启保持有正面证据；cross-ad-hoc-rebuild 已观察不保持 | 撤销：用户取消／未执行；稳定签名跨构建未验 |
-| 内部 .app CAP-18/72 | unit-tested | 不适用 | arm64、独立资源、/Applications 启动与零输入自检有证据 | 新构建身份每次重新验，不是公开发行 |
-| persistent capture/BGR/content-only CAP-20～23/27 | unit-tested | 1920×1080/1000 帧；1280×800 原生 16:10 | 16:10 与 16:9 真实捕获有历史证据 | 最新包按实际比例复验，不拉伸/裁切 |
-| lifecycle/geometry CAP-24～26/28 | unit-tested | move/resize/scale、旧 generation 拒绝有证据 | 查询瞬时否定与启动恢复出现过缺陷 | 新鲜 geometry/frame 与显式恢复真机 |
-| heartbeat 新鲜帧门槛（新增） | unit-tested | 本修复未真机验 | 本修复未真机验 | running 但 2 秒无新发布帧立即停输入；不可自动续跑 |
-| key/button/absolute/scroll CAP-30～34/40/42 | unit-tested | tap/hold、WASD、三鼠标键、组合和滚轮已实际输入 | AutoPick、导航点击、战斗输入有历史证据 | 正式任务路径与新身份下代表流程 |
-| guard/release/shutdown CAP-35～39/75 | unit-tested | W 失焦释放、失焦拒绝输入、stop/capture-close 释放有证据 | 部分清理/正常退出有证据，早期闪退已单独归因 | 最新包 stop/失焦/退出仍需窄范围复验 |
-| 相对自由镜头 CAP-41/63 | not-implemented | 未验证 | 未验证 | 独立 MAC_FULL_CAMERA gate；不扩大本轮 |
-| 热键/任务平台化 CAP-51～54 | unit-tested | 自定义 Y 指南已通过 | 不把默认 F2 当用户绑定 | 其他电脑键位仍必须读取/确认 |
-| 打开截图目录 CAP-55 | unit-tested | 本修复未真机验 | 本修复未真机验 | 两正式 task 使用框架 open_path，不直接 OS API |
-| CPU OCR/model CAP-56/57 | unit-tested | 已识别实景 | Qt Cocoa、OpenCV、OpenVINO CPU OCR/Echo 模型和实景 OCR 有证据 | 新包加载/只读识别；NPU 关闭 |
-| UI 声明 CAP-58/64 | unit-tested | 部分 GUI 观察 | 权限/窗口/任务界面已有证据 | 不以 probe 成功升级正式任务 |
-| CI/公开发行 CAP-70/71/76 | 已记录工作树的 Mac 本地测试通过 | 不适用 | Developer ID、公证、staple、Gatekeeper clean-user 未验证 | 本轮 exact-SHA Windows/macOS CI 待结果，不继承旧结论 |
-| 系统最低版本 | 当前 packaged MVP 与 verifier 基线 15.0；框架 host gate 13+ | 当前主机证据不能证明 13/14 | 既有包 main/Python/PySide6 wrapper minos=15.0，285 native 已有审计 | macOS 13/14 不在当前包范围；新包按 exact SHA/指纹独立验收 |
+| 安装、导入、声明 CAP-01～09 | exact-SHA unit-tested | 原生 GUI 已运行 | exact-SHA 独立包由用户手工 smoke 正常 | 最终 upstream 接受后的不可变 ok-script 依赖 |
+| 主窗口绑定/前台 CAP-10～15/50 | unit-tested | 官方游戏绑定、W 失焦已有详细历史证据 | 最终 exact-SHA 包整体手工运行正常；未按单项重新拆录 | 如 reviewer 要求，再补窄范围逐项记录 |
+| 权限 CAP-16/17/73/74 | unit-tested | 两权限授权输入/捕获有历史证据 | same-build 重启保持有正面证据；cross-ad-hoc-rebuild 已观察不保持；最终包整体 smoke 正常 | 权限撤销未逐项确认；稳定签名跨构建留公开发行阶段 |
+| 内部 .app CAP-18/72 | unit-tested | 不适用 | exact-SHA arm64 `/Applications` 包静态验证通过，用户手工运行正常 | upstream/release identity 协调；非公开发行证据 |
+| persistent capture/BGR/content-only CAP-20～23/27 | unit-tested | 1920×1080/1000 帧；1280×800 原生 16:10 有详细历史证据 | 最终 exact-SHA 包整体手工运行正常 | 保留历史详细帧证据，不由总体 smoke 补猜逐项数值 |
+| lifecycle/geometry CAP-24～26/28 | unit-tested | move/resize/scale、旧 generation 拒绝有详细证据 | 最终 exact-SHA 包整体手工运行正常 | reviewer 如要求再做特定窗口重建复现 |
+| heartbeat 新鲜帧门槛 | unit-tested | 未单独真机制造 stall | 未单独制造 stall | 仍以 2 秒 heartbeat fail-closed 契约和自动化为证据，不从正常 smoke 推断故障注入通过 |
+| key/button/absolute/scroll CAP-30～34/40/42 | unit-tested | tap/hold、WASD、三鼠标键、组合和滚轮已有实际输入证据 | 最终 exact-SHA 包整体手工运行正常 | 未逐 task 拆分的功能继续按 task status 声明 |
+| guard/release/shutdown CAP-35～39/75 | unit-tested | W 失焦释放、失焦拒绝输入、stop/capture-close 有详细历史证据 | 最终 exact-SHA 包整体手工运行正常 | 未单独记录的新故障注入场景不补猜 |
+| 相对自由镜头 CAP-41/63 | not-implemented | 未验证 | 未验证 | 独立 MAC_FULL_CAMERA gate；不阻塞基础 MVP |
+| 热键/任务平台化 CAP-51～54 | unit-tested | 自定义 Y 指南已有证据 | 最终包整体 smoke 正常 | 其他用户自定义键位仍按配置确认 |
+| 打开截图目录 CAP-55 | unit-tested | 未单独真机复验 | 未单独复验 | 两正式 task 已使用框架 open_path，不直接 OS API |
+| CPU OCR/model CAP-56/57 | unit-tested | 已识别实景 | exact-SHA package 静态/构建自检基础已通过，用户整体 smoke 正常 | 不由总体 smoke 补猜具体 OCR 性能指标 |
+| UI 声明 CAP-58/64 | unit-tested | 部分 GUI 观察 | 最终 exact-SHA 包整体手工运行正常 | task 状态仍按逐项证据维护 |
+| CI/公开发行 CAP-70/71/76 | exact-SHA 本地回归通过 | 不适用 | Developer ID、公证、staple、Gatekeeper clean-user 未验证 | exact-SHA CI 已全绿；公开发行门槛仍后置 |
+| 系统最低版本 | packaged MVP/verifier 为 15.0；框架 host gate 13+ | 当前主机不证明 13/14 | exact-SHA 包主程序及 285 native 已按 15.0 hard gate 验证 | macOS 13/14 不在当前 packaged MVP 范围 |
 
 ### 当前任务结论
 
-- AutoPick：source 地面拾取端到端与 packaged 历史前后画面已有证据，是首个新包复验候选；
-  当前代码声明仍为 `experimental`，不因旧包通过自动升级修复版。
+- 用户已确认最终 exact-SHA package 手工实测运行正常；由于本次确认没有按每个 task 单独列出步骤/结果，任务 registry 不据此批量升级。
+- AutoPick：source 地面拾取端到端与 packaged 历史前后画面已有证据；当前代码声明仍为 `experimental`，除非在 PR 沟通中决定用既有逐项证据正式升级，否则保持保守声明。
 - AutoLogin：已登录状态识别；不是从退出状态完整登录的证据。
 - AutoCombat：基本战斗、攻击、切人和停止释放已有 source/部分 packaged 证据；
   不是所有角色循环或完整正式任务稳定闭环。
@@ -48,12 +45,7 @@
 
 ### 证据定位与版本边界
 
-详细历史见 `macos-internal-acceptance.md` 的各时间戳与 CDHash；其中早期 CURRENT INTERNAL BUILD 标题仅指该节当时状态。本轮基线文档修改不构成重新打包或安装。
-历史安装包 CDHash `2ebce129051af084a98df6604912719d952cf046`
-的无输入自检通过，但不含其后 heartbeat 与最新多源 liveness 修复。
-更早 16:9 guide-entry、16:10 AutoPick 等证据必须保留各自时间线/CDHash，不能归到该哈希。
-没有记录的 SHA、dirty fingerprint、probe hash 不补猜，不回填为精确版本。
-本矩阵不是「Mac 内部包完整验收通过」或「上游 MVP/公开发行就绪」声明。
+详细历史见 `macos-internal-acceptance.md` 的各时间戳与 CDHash；其中早期 CURRENT INTERNAL BUILD 标题仅指该节当时状态。当前最终 exact-SHA 包为 ok-script `91a897071c6013930a9e23452e7b61fd112af310`、OK-WW `c03138895323413a98eca4ca59e9434bcba1682f`、CDHash `6584ba8b8964462ede0aa932113a1c9c8ecfcdd8`，构建 provenance 为 clean source，用户已确认整体手工实测正常。更早 16:9 guide-entry、16:10 AutoPick 等详细证据继续保留各自时间线/CDHash；没有记录的 SHA、dirty fingerprint、probe hash 或逐项故障注入结果不补猜。本矩阵仍不等于 Developer ID/notarization/公开发行就绪声明。
 
 ---
 
