@@ -73,7 +73,7 @@ def verify(bundle, minimum_macos=INTERNAL_MINIMUM_MACOS):
     if errors:
         raise SystemExit(1)
     print('Static checks passed; runtime, TCC, game and exit acceptance remain separate.')
-    print('Product macOS 13/14 compatibility remains blocked; this verifies only the declared internal baseline.')
+    print('OK-WW packaged MVP requires macOS 15+; macOS 13/14 are outside this product baseline.')
     return {'native_minimums': native_minimums}
 
 

@@ -9,7 +9,7 @@ import tempfile
 
 BUNDLE_ID = 'org.okww.foreground.internal'
 INTERNAL_MINIMUM_MACOS = '15.0'
-PRODUCT_TARGET_MACOS = '13.0'
+PRODUCT_TARGET_MACOS = '15.0'  # ADR 0003; framework API baseline remains 13+.
 
 
 def sha256(path):

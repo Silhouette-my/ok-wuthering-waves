@@ -5,6 +5,11 @@ import pytest
 from scripts.macos_build_metadata import parse_minos, repository_provenance, version_tuple
 
 
+def test_product_and_internal_deployment_contract_agree():
+    from scripts.macos_build_metadata import INTERNAL_MINIMUM_MACOS, PRODUCT_TARGET_MACOS
+    assert INTERNAL_MINIMUM_MACOS == PRODUCT_TARGET_MACOS == '15.0'
+
+
 @pytest.mark.parametrize('text, expected', [
     ('cmd LC_BUILD_VERSION\ncmdsize 32\nplatform 1\nminos 15.0\nsdk 26.2', '15.0'),
     ('cmd LC_VERSION_MIN_MACOSX\ncmdsize 16\nversion 13.0\nsdk 14.2', '13.0'),
