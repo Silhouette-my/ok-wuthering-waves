@@ -57,8 +57,24 @@ jobs:
           cache-dependency-path: |
             ok-script/pyproject.toml
             ok-wuthering-waves/pyproject.toml
+            ok-wuthering-waves/requirements.txt
 
-      - name: Install sibling editable projects
+      - name: Install Windows locked runtime and exact sibling
+        if: runner.os == 'Windows'
+        working-directory: ok-wuthering-waves
+        shell: bash
+        run: |
+          set -euo pipefail
+          framework_sha="$(git -C ../ok-script rev-parse HEAD)"
+          export OK_SCRIPT_BUILD_VERSION="2.0.7b1+macos.${framework_sha}"
+          echo "OK-WW $(git rev-parse HEAD) against ok-script ${framework_sha}"
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e ../ok-script -e .
+          python -m pip install pytest pytest-subtests polib
+          python -m pip check
+
+      - name: Install macOS sibling editable projects
+        if: runner.os == 'macOS'
         working-directory: ok-wuthering-waves
         shell: bash
         run: |

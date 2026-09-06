@@ -13,3 +13,20 @@ def test_both_ci_gates_pin_the_same_complete_framework_sha():
         refs.append(match.group(1))
         assert 'OK_SCRIPT_BUILD_VERSION="2.0.7b1+macos.${framework_sha}"' in text
     assert refs[0] == refs[1]
+
+
+def test_windows_matrix_uses_locked_runtime_without_resolving_framework_extras():
+    workflow = (Path(__file__).resolve().parents[1] / '.github' / 'workflows'
+                / 'macos-foreground-guardrails.yml').read_text(encoding='utf-8')
+    windows = workflow.split('- name: Install Windows locked runtime and exact sibling', 1)[1]
+    windows = windows.split('- name:', 1)[0]
+    assert "if: runner.os == 'Windows'" in windows
+    assert 'python -m pip install -r requirements.txt' in windows
+    assert 'python -m pip install --no-deps -e ../ok-script -e .' in windows
+    assert 'python -m pip check' in windows
+    assert '[default' not in windows
+    # Dependency alignment must not remove either test suite on Windows.
+    for step_name in ('Run platform and task capability contracts',
+                      'Run legacy task tests in isolated processes'):
+        step = workflow.split(f'- name: {step_name}', 1)[1].split('- name:', 1)[0]
+        assert 'if:' not in step
