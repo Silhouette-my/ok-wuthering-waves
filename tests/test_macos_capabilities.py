@@ -2,6 +2,7 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
+from unittest.mock import Mock
 
 from config import config
 from ok.device.capabilities import DeviceCapabilities, MissingDeviceCapabilitiesError
@@ -17,6 +18,24 @@ from src.macos_capabilities import (
 from src.task.AutoCombatTask import AutoCombatTask
 from src.task.AutoPickTask import AutoPickTask
 from src.task.MouseResetTask import MouseResetTask
+
+
+@pytest.mark.parametrize('platform,enabled', [('darwin', False), ('win32', True)])
+def test_mouse_reset_default_does_not_block_fresh_macos_start(monkeypatch, platform, enabled):
+    module = importlib.import_module('src.task.MouseResetTask')
+    monkeypatch.setattr(module.sys, 'platform', platform)
+    task = MouseResetTask(Mock(), Mock())
+    assert task.default_config['_enabled'] is enabled
+
+
+def test_mouse_reset_saved_enabled_preference_is_not_run_on_macos(monkeypatch):
+    module = importlib.import_module('src.task.MouseResetTask')
+    monkeypatch.setattr(module.sys, 'platform', 'darwin')
+    task = MouseResetTask(Mock(), Mock())
+    task.config = {'_enabled': True}
+    task.on_create()
+    assert not task.enabled
+    assert task.config['_enabled'] is True  # Do not erase the Windows preference.
 
 
 def registered_task_ids():

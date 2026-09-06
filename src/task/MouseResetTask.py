@@ -1,7 +1,9 @@
 import math
+import sys
 
 from ok import TriggerTask, Logger
 from src.macos_capabilities import MacTaskUnsupportedError, get_macos_task_compatibility
+from src.macos_game_integration import uses_macos_provider
 
 logger = Logger.get_logger(__name__)
 
@@ -10,20 +12,27 @@ class MouseResetTask(TriggerTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default_config = {'_enabled': True}
+        self.default_config = {'_enabled': sys.platform != 'darwin'}
         self.trigger_interval = 10
         self.name = "🖱️ Prevent Wuthering Waves from moving the mouse"
         self.description = "Turn on if you mouse jumps around"
         self.mouse_pos = None
         self._unavailable_logged = False
 
+    def on_create(self):
+        super().on_create()
+        if sys.platform == 'darwin':
+            # Ignore an old enabled preference on an unsupported platform.
+            # Preserve the persisted preference for a later Windows launch.
+            if self._enabled:
+                logger.info('MouseResetTask is unsupported on macOS; not enabling saved preference')
+            self._enabled = False
+
     def get_macos_compatibility(self):
         return get_macos_task_compatibility(self)
 
     def _uses_macos_provider(self) -> bool:
-        manager = getattr(self.executor, 'device_manager', None)
-        device = manager.get_preferred_device() if manager else None
-        return bool(device and device.get('device') == 'macos')
+        return uses_macos_provider(self)
 
     def get_device_compatibility_state(self) -> dict:
         if self._uses_macos_provider():
