@@ -2,7 +2,11 @@
 
 状态：**实施计划；不得削弱 `MACOS_ENGINEERING_CONSTRAINTS.md`**
 
-目标：Apple Silicon arm64、macOS 13+、Python 3.12 arm64、官方《鸣潮》Mac 客户端、1920×1080 首个硬件验收、CPU OCR/推理
+2026-09-05：Stage D/F/H 的分辨率验收按已接受的 ADR `decisions/0001-native-macos-aspect-ratio.md` 增加原生16:10路径；1920×1080保留为16:9回归目标。代码适配、真实输入/视觉端到端和packaged app证据分别记录。
+
+目标：Apple Silicon arm64、macOS 15+（当前 packaged MVP）、Python 3.12 arm64、官方《鸣潮》Mac 客户端、1920×1080 首个硬件验收、CPU OCR/推理
+
+2026-09-06：用户授权 contributor 分支采用 OK-WW ADR `docs/development/decisions/0003-macos-packaged-minimum-version.md`，当前 packaged MVP 不再承诺 macOS 13/14。框架公开 API 设计与 host gate 仍为 13+。此为本分支的产品基线决定，不代表 upstream 接受；下方早期阶段状态和历史验收不证明当前 exact SHA 或新 package 通过。
 
 分支：`ok-script` 与 `ok-wuthering-waves` 的 `feature/macos-foreground-mvp`
 
@@ -526,6 +530,8 @@ hold Shift/right/middle → 切换应用
 - CI 不要求游戏或弹权限提示。
 
 ### 内部 `.app`
+
+当前最低 macOS 15.0。逐个解析主程序与全部 native arm64 slice 的真实 minos，并与 plist、构建 metadata 和用户安装说明一致；不忽略未知项，不伪改旧系统支持。Python/PySide6 wrapper 与 Qt 原生框架分别记录，不能用其中一部分较低的 minos 推断整个应用。
 
 稳定 bundle identifier，安装到 `/Applications`，验证：
 

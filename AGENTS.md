@@ -140,10 +140,12 @@ Do not add an OK-WW-local `win32api`-shaped compatibility shim; use platform-neu
 
 The first macOS version is **foreground only**.
 
+当前 contributor 集成分支的 packaged MVP 最低版本为 macOS 15.0。`ok-script` 的公开 API 设计与通用 host gate 仍以 macOS 13+ 为基线；它们不构成 OK-WW 二进制对 13/14 的支持承诺。本决定经用户授权，不代表 upstream 已接受；不得通过下调 plist 或 Mach-O 标记伪造兼容性。
+
 It MUST:
 
 - run only on Apple Silicon
-- target macOS 13 or newer
+- target macOS 15 or newer for the current packaged OK-WW MVP; see `docs/development/decisions/0003-macos-packaged-minimum-version.md`
 - use the official Wuthering Waves Mac client
 - use public Apple APIs only
 - capture the selected game window with ScreenCaptureKit

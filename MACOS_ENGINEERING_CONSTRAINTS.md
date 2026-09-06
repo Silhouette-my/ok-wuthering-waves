@@ -2,7 +2,11 @@
 
 状态：**macOS 前台模式 MVP 的规范性产品与工程合同**
 
-目标基线：Apple Silicon arm64、macOS 13+、Python 3.12 arm64、官方《鸣潮》Mac 客户端、前台模式、1920×1080 首个硬件验收、CPU OCR/推理
+2026-09-05 规范修订：已接受的 `docs/development/decisions/0001-native-macos-aspect-ratio.md` 对下文“仅16:9/首验1920×1080”作窄例外，允许 Mac 原生16:10按真实内容帧验收。16:9仍为既有参考/回归目标；不允许拉伸整帧、伪裁切或自动放行任意比例。其余安全及发布门槛不变。
+
+目标基线：Apple Silicon arm64、macOS 15+（当前 packaged MVP）、Python 3.12 arm64、官方《鸣潮》Mac 客户端、前台模式、1920×1080 首个硬件验收、CPU OCR/推理
+
+2026-09-06 规范修订：用户授权 contributor 集成分支按 OK-WW ADR `docs/development/decisions/0003-macos-packaged-minimum-version.md` 将当前 packaged MVP 最低版本收窄为 macOS 15.0；不代表 upstream 已接受。此前产品 13+ 目标被本决策取代，macOS 13/14 不在当前 packaged MVP 支持范围。框架公开 API 设计与通用 host gate 仍为 macOS 13+，不据此承诺 consumer 二进制兼容。历史记录保留其日期与产物身份，不能替代当前提交和新包验收。
 
 本文规定首个原生 macOS 版本的硬性边界。文中的“必须”“不得”“仅允许”和“发布门槛”均为强制要求，不得通过兼容垫片、隐藏回退、空实现、降低安全检查或夸大证据绕过。
 
@@ -88,7 +92,7 @@ OK-WW 发现并绑定真实游戏窗口
 首个正式目标：
 
 - Apple Silicon arm64；
-- macOS 13+；
+- macOS 15+（当前 packaged MVP）；
 - Python 3.12 arm64；
 - 官方《鸣潮》Mac 客户端；
 - 前台模式；
@@ -100,7 +104,7 @@ OK-WW 发现并绑定真实游戏窗口
 
 明确不支持：
 
-- Intel Mac 和正式 macOS 12 承诺；
+- Intel Mac 和 macOS 14 或更早系统上的当前 packaged MVP；
 - 后台、最小化、被其他应用覆盖时继续自动化；
 - BetterDisplay、虚拟显示器、私有 `CGVirtualDisplay`；
 - `CGEvent.postToPid` 后台控制；
@@ -691,6 +695,8 @@ CI 不安装游戏。macOS Python 3.12 job 做依赖、import 和无游戏测试
 
 ## 20. 打包与公开分发
 
+- 当前 packaged MVP 的最低系统版本为 macOS 15.0；主程序及全部随包 native library 的真实最低版本均不得高于该声明。缺失或无法解析最低版本的文件必须明确失败，不忽略检查。
+- 同时审计 `LSMinimumSystemVersion`、主程序和所有依赖的 Mach-O arm64 slice；不得只修改 plist、deployment flag 或 Mach-O load command 来假装支持 13/14。未来恢复旧系统须按 ADR 0003 重新证明完整依赖与真机/打包兼容性。
 - window/permission 边界完成后尽早建立稳定 bundle identifier 的内部 `.app`。
 - 内部包验证 arm64 libraries、Qt plugin、OpenCV、OCR/inference、PyObjC、assets/i18n、TCC 和 shutdown。
 - 最终 MVP PR 前必须完成 packaged-app permission validation。

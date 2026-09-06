@@ -36,6 +36,10 @@ Use one of:
 
 A proposed ADR does not authorize code that violates the current contract. Acceptance by the relevant project owners/maintainers is required before such implementation proceeds.
 
+本 contributor 集成分支的用户可以明确授权其分支内的设计决定；ADR 必须记录该授权范围，不能把它写成 upstream 维护者已经接受。最终上游 MVP 审查与验收门槛仍适用。
+
+当前决策：[ADR 0003：packaged MVP 最低 macOS 15+](0003-macos-packaged-minimum-version.md)；框架 13+ API 设计与 host gate 保留，当前包不支持 13/14。
+
 ## Cross-repository decisions
 
 A decision spanning both repositories must:
