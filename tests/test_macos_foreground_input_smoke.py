@@ -197,6 +197,30 @@ def test_default_mode_is_read_only_but_checks_real_frame_contract(monkeypatch):
     assert FakeCapture.instances[0].closed
 
 
+def test_native_target_is_explicit_and_must_match_actual_frame(monkeypatch):
+    install_fakes(monkeypatch)
+    report, code = smoke.run_smoke(expected_frame=(1280, 800))
+    assert code == 5
+    assert not report['event_post_attempted'] and not FakeInteraction.instances
+    original = FakeCapture.get_frame_packet
+
+    def native(self):
+        packet = original(self)
+        packet.frame = np.zeros((800, 1280, 3), dtype=np.uint8)
+        return packet
+
+    monkeypatch.setattr(FakeCapture, 'get_frame_packet', native)
+    report, code = smoke.run_smoke(expected_frame=(1280, 800))
+    assert code == 0 and report['expected_frame'] == [1280, 800]
+    assert not report['event_post_attempted'] and not FakeInteraction.instances
+
+
+def test_unknown_frame_target_is_rejected_before_capture(monkeypatch):
+    install_fakes(monkeypatch)
+    report, code = smoke.run_smoke(expected_frame=(1512, 982))
+    assert code == 2 and not FakeCapture.instances
+
+
 def test_confirmed_mode_posts_only_one_f2_tap_and_cleans_up(monkeypatch):
     install_fakes(monkeypatch)
 

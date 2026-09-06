@@ -29,6 +29,8 @@ from ok.util.handler import ExitEvent
 
 CONFIRMATION = "I_CONFIRM_ONE_F2_TAP"
 EXPECTED_FRAME = (1920, 1080)
+FRAME_TARGETS = ('1920x1080', '1280x800', '1352x845', '1512x945',
+                 '2560x1600', '2704x1690', '3024x1890')
 
 
 class _SmokeFinished(Exception):
@@ -94,7 +96,8 @@ def _geometry_difference(left, right) -> float:
 def run_smoke(
         *, execute: bool = False, confirmation: str = "",
         observe_move: bool = False, move_delay: float = 8.0,
-        window_id: int | None = None, timeout: float = 10.0
+        window_id: int | None = None, timeout: float = 10.0,
+        expected_frame: tuple[int, int] = EXPECTED_FRAME
         ) -> tuple[dict[str, object], int]:
     """Run a read-only preflight, or one explicitly confirmed F2 tap."""
     report: dict[str, object] = {
@@ -103,7 +106,11 @@ def run_smoke(
                 "observe-window-move" if observe_move else "read-only-preflight")),
         "event_post_attempted": False,
         "action_completed": False,
+        "expected_frame": list(expected_frame),
     }
+    if 'x'.join(str(v) for v in expected_frame) not in FRAME_TARGETS:
+        report['error'] = 'unsupported explicit frame target'
+        return report, 2
     if timeout <= 0 or move_delay < 0:
         report["error"] = "timeout must be positive and move delay non-negative"
         return report, 2
@@ -162,9 +169,9 @@ def run_smoke(
         report["capture"] = _capture_report(packet)
         frame_width = report["capture"]["frame_width"]
         frame_height = report["capture"]["frame_height"]
-        if (frame_width, frame_height) != EXPECTED_FRAME:
+        if (frame_width, frame_height) != expected_frame:
             report["error"] = (
-                "first hardware smoke requires an actual 1920x1080 content frame")
+                f"hardware smoke requires an actual {expected_frame[0]}x{expected_frame[1]} content frame")
             raise _SmokeFinished(5)
 
         report["ready_for_one_f2_tap"] = True
@@ -261,6 +268,8 @@ def main() -> int:
             "默认只预检；显式确认后仅向前台官方客户端发送一次 F2 tap。"))
     parser.add_argument("--window-id", type=int)
     parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument('--expected-frame-size', choices=FRAME_TARGETS, default='1920x1080',
+                        help='显式验收内容帧尺寸；按新截图实测选择，不根据菜单或Retina倍数猜测。')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--execute-one-f2-tap",
@@ -291,6 +300,7 @@ def main() -> int:
         move_delay=args.move_delay,
         window_id=args.window_id,
         timeout=args.timeout,
+        expected_frame=tuple(int(v) for v in args.expected_frame_size.split('x')),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     return exit_code
