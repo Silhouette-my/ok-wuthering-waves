@@ -36,7 +36,8 @@ def test_minimum_and_provenance_are_hard_gates(tmp_path, monkeypatch, plist_min,
     monkeypatch.setattr(verifier.subprocess, 'run', lambda *a, **k: None)
     monkeypatch.setattr(verifier, 'native_minimum', lambda path: native_min)
     if succeeds:
-        assert verifier.verify(contents.parent)['native_minimums']['Contents/MacOS/main'] == native_min
+        relative_binary = str((binary_dir / 'main').relative_to(contents.parent))
+        assert verifier.verify(contents.parent)['native_minimums'][relative_binary] == native_min
     else:
         with pytest.raises(SystemExit):
             verifier.verify(contents.parent)

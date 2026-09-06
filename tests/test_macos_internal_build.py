@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 
 import pytest
@@ -7,7 +7,7 @@ from scripts import build_macos_internal as build
 
 
 def test_build_identity_and_resource_allowlist():
-    command = build.build_command(Path('/repo'), '/venv/bin/python')
+    command = build.build_command(PurePosixPath('/repo'), '/venv/bin/python')
     assert '--macos-signed-app-name=org.okww.foreground.internal' in command
     assert '--macos-target-arch=arm64' in command
     assert '--macos-app-name=OK-WW' in command
