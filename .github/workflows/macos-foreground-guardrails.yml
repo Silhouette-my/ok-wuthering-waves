@@ -41,11 +41,11 @@ jobs:
           lfs: true
           persist-credentials: false
 
-      - name: Check out sibling ok-script integration branch
+      - name: Check out exact compatible ok-script commit
         uses: actions/checkout@v4
         with:
           repository: Silhouette-my/ok-script
-          ref: feature/macos-foreground-mvp
+          ref: e5a9d77ccb2227f79fedbb5d1b060906691059e9
           path: ok-script
           persist-credentials: false
 
@@ -62,6 +62,10 @@ jobs:
         working-directory: ok-wuthering-waves
         shell: bash
         run: |
+          set -euo pipefail
+          framework_sha="$(git -C ../ok-script rev-parse HEAD)"
+          export OK_SCRIPT_BUILD_VERSION="2.0.7b1+macos.${framework_sha}"
+          echo "OK-WW $(git rev-parse HEAD) against ok-script ${framework_sha}"
           python -m pip install --upgrade pip
           python -m pip install -e "../ok-script[default,ocr,qt,dev]" opencv-python pytest-subtests
           python -m pip install -e ".[dev]"
@@ -71,8 +75,13 @@ jobs:
         working-directory: ok-wuthering-waves
         shell: bash
         run: |
-          python -m pytest -q \
-            tests/test_macos_capabilities.py \
-            tests/test_macos_imports.py \
-            tests/TestMouseResetTask.py \
-            tests/TestConfig.py
+          python -m pytest -q tests/test_macos*.py
+
+      - name: Run legacy task tests in isolated processes
+        working-directory: ok-wuthering-waves
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/Test*.py; do
+            python -m unittest "$test_file"
+          done

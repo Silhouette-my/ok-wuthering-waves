@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Silhouette-my/ok-script
-          ref: ee3c63d82a36a5b1867b54483f3a2cfda4f40f84
+          ref: e5a9d77ccb2227f79fedbb5d1b060906691059e9
           path: .ci/ok-script
           persist-credentials: false
 
@@ -63,7 +63,12 @@ jobs:
           echo PYTHONIOENCODING=utf-8 >> $GITHUB_ENV
 
       - name: Install Dependencies
+        shell: bash
         run: |
+          set -euo pipefail
+          framework_sha="$(git -C .ci/ok-script rev-parse HEAD)"
+          export OK_SCRIPT_BUILD_VERSION="2.0.7b1+macos.${framework_sha}"
+          echo "OK-WW $(git rev-parse HEAD) against ok-script ${framework_sha}"
           python -m pip install -r requirements.txt
           python -m pip install --no-deps -e ".ci/ok-script"
           python -m pip check
@@ -98,7 +103,7 @@ jobs:
 
           # Legacy application tests use unittest-style Test*.py files.
           # Pytest-style platform contract tests run in the dedicated
-          # macOS foreground guardrail workflow with the sibling ok-script branch.
+          # macOS foreground guardrail workflow with the same exact ok-script SHA.
           Get-ChildItem -Path ".\tests" -File |
             Where-Object { $_.Name -cmatch '^Test.*\.py$' } |
             Sort-Object Name |
