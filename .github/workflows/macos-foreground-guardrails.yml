@@ -96,6 +96,10 @@ jobs:
       - name: Run legacy task tests in isolated processes
         working-directory: ok-wuthering-waves
         shell: bash
+        env:
+          # Legacy tests construct QApplication; match the primary Windows gate.
+          # Contracts above remain headless on both platforms.
+          QT_QPA_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || 'offscreen' }}
         run: |
           set -euo pipefail
           for test_file in tests/Test*.py; do

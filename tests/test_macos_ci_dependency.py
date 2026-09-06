@@ -30,3 +30,15 @@ def test_windows_matrix_uses_locked_runtime_without_resolving_framework_extras()
                       'Run legacy task tests in isolated processes'):
         step = workflow.split(f'- name: {step_name}', 1)[1].split('- name:', 1)[0]
         assert 'if:' not in step
+
+
+def test_legacy_qt_platform_matches_each_host_without_changing_contracts():
+    workflow = (Path(__file__).resolve().parents[1] / '.github' / 'workflows'
+                / 'macos-foreground-guardrails.yml').read_text(encoding='utf-8')
+    assert 'QT_QPA_PLATFORM: offscreen' in workflow
+    contracts = workflow.split('- name: Run platform and task capability contracts', 1)[1]
+    contracts = contracts.split('- name:', 1)[0]
+    assert 'QT_QPA_PLATFORM:' not in contracts
+    legacy = workflow.split('- name: Run legacy task tests in isolated processes', 1)[1]
+    assert "QT_QPA_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || 'offscreen' }}" in legacy
+    assert 'python -m unittest "$test_file"' in legacy
